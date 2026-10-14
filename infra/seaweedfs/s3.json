@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "odortwin",
+      "credentials": [{ "accessKey": "odortwin", "secretKey": "odortwin-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

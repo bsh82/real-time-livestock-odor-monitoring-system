@@ -1,0 +1,128 @@
+# OdorTwin 인프라 (로컬 PC 1대). 파이썬 서비스(시뮬레이터·브리지·기상·확산엔진·API)는 호스트에서 실행.
+# 기동: docker compose up -d   |  상태: docker compose ps
+# 자원 상한: 합계 CPU 약 9.5 / 12, 메모리 약 11 GB (로컬 CPU 80 % 이하 유지 목적)
+name: odortwin
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports: ["127.0.0.1:1883:1883"]
+    volumes: ["./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro"]
+    cpus: 0.25
+    mem_limit: 128m
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports: ["127.0.0.1:9092:9092"]
+    environment:
+      CLUSTER_ID: "gTuBXpS8S-SsD0QK9uizSw"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://127.0.0.1:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_RETENTION_HOURS: 72
+      KAFKA_HEAP_OPTS: "-Xms768m -Xmx768m"
+    volumes: ["kafka-data:/var/lib/kafka/data"]
+    cpus: 1.5
+    mem_limit: 1536m
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports: ["127.0.0.1:8085:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: odortwin
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on: [kafka]
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg17
+    ports: ["127.0.0.1:5433:5432"]
+    environment:
+      POSTGRES_USER: odor
+      POSTGRES_PASSWORD: odortwin
+      POSTGRES_DB: odor
+    volumes:
+      - ts-data:/var/lib/postgresql/data
+      - ./infra/timescale/init:/docker-entrypoint-initdb.d:ro
+    cpus: 1.5
+    mem_limit: 2g
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.97
+    command: "server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=512 -volume.max=100"
+    ports: ["127.0.0.1:8333:8333", "127.0.0.1:9333:9333"]
+    volumes:
+      - sw-data:/data
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+
+  trino:
+    image: trinodb/trino:476
+    ports: ["127.0.0.1:8088:8080"]
+    volumes:
+      - ./infra/trino/catalog:/etc/trino/catalog:ro
+    depends_on: [timescaledb, seaweedfs]
+    cpus: 2
+    mem_limit: 3g
+    restart: unless-stopped
+
+  flink-jobmanager:
+    build: ./infra/flink
+    image: odortwin/flink:1.20
+    command: jobmanager
+    ports: ["127.0.0.1:8081:8081"]
+    environment:
+      TZ: Asia/Seoul
+      FLINK_PROPERTIES: |
+        env.java.opts.all: -Duser.timezone=Asia/Seoul
+        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.memory.process.size: 1024m
+        parallelism.default: 1
+        execution.checkpointing.interval: 10s
+        table.exec.source.idle-timeout: 5 s
+        table.local-time-zone: Asia/Seoul
+    volumes: ["./infra/flink/jobs:/opt/flink/jobs:ro"]
+    depends_on: [kafka, timescaledb]
+    cpus: 1
+    mem_limit: 1280m
+    restart: unless-stopped
+
+  flink-taskmanager:
+    image: odortwin/flink:1.20
+    command: taskmanager
+    environment:
+      TZ: Asia/Seoul
+      FLINK_PROPERTIES: |
+        env.java.opts.all: -Duser.timezone=Asia/Seoul
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 12
+        taskmanager.memory.process.size: 2048m
+        parallelism.default: 1
+        table.local-time-zone: Asia/Seoul
+    depends_on: [flink-jobmanager]
+    cpus: 2
+    mem_limit: 2304m
+    restart: unless-stopped
+
+volumes:
+  kafka-data:
+  ts-data:
+  sw-data:

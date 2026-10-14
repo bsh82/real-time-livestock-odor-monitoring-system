@@ -1,0 +1,12 @@
+{
+  "_comment": "data/demo_config.json 으로 복사해 실제 센서 코드로 채운다. suspect = 데이터 이상 센서(확산 계산에서 제외, 화면에 '점검'), scenario = 발표용 시나리오 대상.",
+  "suspect": {
+    "<센서 코드>": "<사유, 예: 값 고정 / 범위 이탈 반복>"
+  },
+  "scenario": {
+    "spike_code": "<배출 급증 시연 배출원 코드>",
+    "offline_code": "<통신 두절 시연 게이트웨이 코드>",
+    "story_cluster": "C01",
+    "west_cluster": "C02"
+  }
+}

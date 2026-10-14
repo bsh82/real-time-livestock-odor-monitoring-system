@@ -1,0 +1,15 @@
+#!/bin/bash
+# 공개 저장소 보호: 실제 센서 코드·농가 이름·비공개 문자열이 들어간 변경과 자료 파일은 커밋을 막는다.
+# 설치: cp tools/hooks/pre-commit .git/hooks/pre-commit
+# 비공개 문자열 목록(정규식, 한 줄에 하나)은 git 에서 제외되는 data/private_patterns.txt 에 둔다.
+added=$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++')
+fail=0
+if echo "$added" | grep -qE '\b150[12]0[0-9]{3}\b'; then echo '[pre-commit] 실제 센서 코드로 보이는 숫자가 있습니다 → data/demo_config.json 으로 옮기세요'; fail=1; fi
+if [ -f data/private_patterns.txt ] && echo "$added" | grep -qiEf data/private_patterns.txt; then echo '[pre-commit] 비공개 문자열(서버·계정·개인 경로 등)이 있습니다'; fail=1; fi
+if [ -f data/sources.csv ]; then
+  py=".conda/python.exe"; [ -x "$py" ] || py=python
+  hit=$(echo "$added" | "$py" -c "import sys,csv; t=sys.stdin.read(); n={r['farm'] for r in csv.DictReader(open('data/sources.csv',encoding='utf-8-sig')) if r.get('farm')}; print(', '.join(sorted(x for x in n if len(x)>=2 and x in t)[:5]))" 2>/dev/null)
+  if [ -n "$hit" ]; then echo "[pre-commit] 실제 농가 이름이 있습니다: $hit"; fail=1; fi
+fi
+if git diff --cached --name-only --diff-filter=AM | grep -qE '^(data|models|logs|runtime)/|\.(parquet|nc|tif|xlsx|csv|pt)$'; then echo '[pre-commit] 자료·모델 파일이 스테이징돼 있습니다'; fail=1; fi
+[ $fail -eq 0 ] || { echo '커밋을 중단했습니다. 내용을 정리한 뒤 다시 커밋하세요.'; exit 1; }

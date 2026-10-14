@@ -1,0 +1,64 @@
+# ---- 공개하지 않는 자료 (센서 실측·농가 위치·모델·시연 설정) ----
+data/
+models/
+runtime/
+logs/
+*.parquet
+*.parquet.state
+*.nc
+*.tif
+*.tiff
+*.xlsx
+*.xls
+*.csv
+*.pt
+*.pth
+*.ckpt
+*.npz
+*.npy
+*.stl
+
+# ---- 실행 환경·빌드 산출물 ----
+.conda/
+.venv/
+__pycache__/
+*.pyc
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+infra/flink/lib/*.jar
+
+# ---- 비밀 값 ----
+.env
+.env.*
+!.env.example
+
+# ---- 기타 ----
+*.log
+*.err
+.DS_Store
+Thumbs.db
+~$*
+
+# ---- 실수로 들어가기 쉬운 비공개 자료 (감사 2026-10-14) ----
+config/*.json
+!config/*.example.json
+**/demo_config.json
+site.json
+*.geojson
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.gpkg
+*.ipynb
+.ipynb_checkpoints/
+*.pdf
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.claude/
+test_farms.txt
+*악취데이터*
