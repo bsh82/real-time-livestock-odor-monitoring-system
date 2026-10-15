@@ -275,11 +275,11 @@ function DataFlow() {
             <span className="muted">최근 {AF_KO[afLake.state] ?? afLake.state ?? '-'} {afLake.start_date ? dayjs(afLake.start_date).format('HH:mm') : ''} · 작업 {af.tasks?.success ?? 0}/{Object.values(af.tasks || {}).reduce((a: number, b: any) => a + b, 0)} 성공</span>
             <span className="muted">24시간 {af.day?.ok ?? 0}/{af.day?.n ?? 0}회 성공{afLake.next_at ? ` · 다음 ${dayjs(afLake.next_at).format('HH:mm')}` : ''} · DAG {af.dags?.filter((d: any) => !d.design).length ?? 0}개 운영 + 설계 {af.dags?.filter((d: any) => d.design).length ?? 0}개</span>
           </div> : null}
-          <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>최근 배치 {run ? `${run.job} · ${Number(run.rows ?? 0).toLocaleString()}행 · ${dayjs(run.finished_at).format('HH:mm:ss')} ${run.status === 'ok' ? '성공' : run.status === 'partial' ? '일부 실패' : '오류'}` : '-'} · 스냅샷 {lake.snapshots?.length ?? 0}개 (Iceberg 시간 여행)</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>최근 배치 {run ? `${run.job} · ${Number(run.rows ?? 0).toLocaleString()}행 · ${dayjs(run.finished_at).format('HH:mm:ss')} ${run.status === 'ok' ? '성공' : run.status === 'partial' ? '일부 실패' : '오류'}` : '-'} · 스냅샷 {(lake.snapshot_count ?? lake.snapshots?.length ?? 0).toLocaleString()}개 (Iceberg 시간 여행)</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <div style={{ fontSize: 13 }}>2년 기록 · 월별 NH₃ (ppm) <span className="muted" style={{ fontSize: 12 }}>2023-02 ~ 2025-04 · gold.monthly_trend</span></div>
-          <div style={{ height: 196 }}><ReactECharts option={opt} style={{ height: '100%' }} notMerge /></div>
+          <div style={{ flex: 1, minHeight: 120 }}><ReactECharts option={opt} style={{ height: '100%' }} notMerge /></div>
         </div>
       </div>
     </div>

@@ -7,13 +7,16 @@ import { dir16 } from './util'
 
 /** 농장 1곳의 3D 확산 보기: 지형(음영기복 + 지상 2 m 농도), 건물, 등농도면(0~50 m), U-FNO 바람 유선과 흐르는 입자.
  *  20초마다 새 자료를 받되, 재질(셰이더)은 처음 만든 것을 계속 쓰고 형상·텍스처만 바꿔서 갱신할 때 멈춤·깜빡임이 없게 한다. */
-type Props = { code: string; onClose: () => void }
+type Wind = { wd: number; ws?: number }
+type Cam = { az: number; el?: number; dist?: number; tx?: number; ty?: number; rotate?: boolean }    // 카메라 방위(북 0°, 시계 방향)·고도각·거리·바라보는 점(동·북 m)
+type Props = { code: string; onClose: () => void; wind?: Wind | null; cam?: Cam | null }
 const BLD_COL: Record<string, string> = { home: '#e2e8f0', exposed: '#ef4444', school: '#60a5fa', care: '#a78bfa', barn: '#b7791f', other: '#5b6b82' }
 const ISO_OPACITY = [0.17, 0.28, 0.45]
 const EXAG = 3                                         // 높이 과장 (고정)
 
-async function fetchScene(code: string) {
-  const r = await fetch(`/api/farm3d?code=${code}`)
+async function fetchScene(code: string, wind?: Wind | null) {
+  const q = new URLSearchParams({ code }); if (wind) { q.set('wd', String(wind.wd)); if (wind.ws != null) q.set('ws', String(wind.ws)) }
+  const r = await fetch(`/api/farm3d?${q}`)
   const text = await r.text(); let j: any = null
   try { j = JSON.parse(text) } catch { /* 본문이 JSON 이 아님 */ }
   if (!r.ok || !j) throw new Error(j?.detail || '확산 엔진에 연결하는 중입니다. 잠시 후 다시 시도합니다.')
@@ -22,14 +25,14 @@ async function fetchScene(code: string) {
   return { d: j, tex }
 }
 
-export default function Farm3D({ code, onClose }: Props) {
+export default function Farm3D({ code, onClose, wind, cam }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const ctx = useRef<any>(null)
   const [scene, setScene] = useState<{ d: any; tex: THREE.Texture } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [show, setShow] = useState<Record<string, boolean>>({ iso: true, wind: true, bld: true, ratio: false })
-  const [rotate, setRotate] = useState(true)
+  const [rotate, setRotate] = useState(cam?.rotate ?? true)
 
   // 자료: 처음 + 20초마다. 바람·배출량·최대 농도가 그대로면 장면을 다시 만들지 않는다.
   useEffect(() => {
@@ -37,7 +40,7 @@ export default function Farm3D({ code, onClose }: Props) {
     const load = async () => {
       setLoading(true)
       try {
-        const s = await fetchScene(code)
+        const s = await fetchScene(code, wind)
         const nsig = [s.d.code, s.d.wd, s.d.ws, s.d.q_total, s.d.cmax].join('|')
         if (!alive) { s.tex.dispose(); return }
         if (nsig === sig) s.tex.dispose(); else { sig = nsig; setScene(s) }
@@ -46,7 +49,7 @@ export default function Farm3D({ code, onClose }: Props) {
     }
     load(); const t = setInterval(load, 20000)
     return () => { alive = false; clearInterval(t) }
-  }, [code])
+  }, [code, wind?.wd, wind?.ws])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -91,7 +94,7 @@ export default function Farm3D({ code, onClose }: Props) {
       renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix()
     })
     ro.observe(el)
-    const c: any = { renderer, scene: sc, camera, controls, world, mats, arrow, north, flow: null, clock: new THREE.Clock(), code: null, groundZ: 0, exag: EXAG, tex: null }
+    const c: any = { renderer, scene: sc, camera, controls, world, mats, arrow, north, flow: null, clock: new THREE.Clock(), code: null, groundZ: 0, exag: EXAG, tex: null, cam: cam ?? null }
     world.scale.z = EXAG
     ctx.current = c
     let raf = 0
@@ -105,6 +108,7 @@ export default function Farm3D({ code, onClose }: Props) {
   }, [])
 
   useEffect(() => { if (ctx.current) ctx.current.controls.autoRotate = rotate }, [rotate])
+  useEffect(() => { if (ctx.current) ctx.current.cam = cam ?? null }, [cam])
   useEffect(() => {
     const c = ctx.current; if (!c || !scene) return
     disposeGeometries(c.world); c.world.clear(); c.flow = null
@@ -127,7 +131,7 @@ export default function Farm3D({ code, onClose }: Props) {
           {d.suspect ? <span className="badge" style={{ marginLeft: 6, color: '#c4b5fd', borderColor: '#4c1d95' }}>데이터 이상 센서({d.suspect}) → 확산 계산 제외 · 가정 배출량으로 모양만 표시</span>
             : d.nominal && <span className="badge" style={{ marginLeft: 6, color: '#fcd34d', borderColor: '#78350f' }}>센서값 없음 → 가정 배출량으로 모양만 표시</span>}</div>}
         {d && <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <Chip l="바람 (10 m)" v={`${dir16(d.wd)} ${d.ws.toFixed(1)} m/s`} />
+          <Chip l={d.override ? '바람 (10 m · 지정)' : '바람 (10 m)'} v={`${dir16(d.wd)} ${d.ws.toFixed(1)} m/s`} />
           <Chip l="가장 높은 주택 (이 농장 기여)" v={homeMax >= 0 ? fmtPpmU(homeMax) : '-'} color={homeMax >= 0.6 ? '#fca5a5' : undefined} />
           <Chip l="GPU 계산" v={`${(d.infer_ms / 1000).toFixed(1)}초 · 풍향 ${d.n_dirs ?? 1}개`} sub="CFD는 풍향 1개 35~45분" />
           {d.homes_06 > 0 && <Chip l="0.6 ppm 이상 주택" v={`${d.homes_06}동`} color="#fca5a5" />}
@@ -264,7 +268,11 @@ function buildScene(c: any, d: any, tex: THREE.Texture) {
   // 회전 중심: 농장이 바뀔 때만 지면 높이로 (20초 갱신 때 시점이 튀지 않게)
   if (c.code !== d.code) {
     c.code = d.code; c.groundZ = d.ground_z ?? 0
-    c.controls.target.set(0, 0, c.groundZ * c.exag); c.camera.position.set(-1500, -2300, 1500 + c.groundZ * c.exag)
+    c.controls.target.set(c.cam?.tx ?? 0, c.cam?.ty ?? 0, c.groundZ * c.exag)
+    if (c.cam) {                                         // 지정 시점: 방위(북 0°, 시계 방향)에서 바라봄
+      const az = (c.cam.az * Math.PI) / 180, el = ((c.cam.el ?? 29) * Math.PI) / 180, r = c.cam.dist ?? 3130
+      c.camera.position.set((c.cam.tx ?? 0) + r * Math.cos(el) * Math.sin(az), (c.cam.ty ?? 0) + r * Math.cos(el) * Math.cos(az), r * Math.sin(el) + c.groundZ * c.exag)
+    } else c.camera.position.set(-1500, -2300, 1500 + c.groundZ * c.exag)
   }
 }
 

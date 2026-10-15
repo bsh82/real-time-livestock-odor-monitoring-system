@@ -80,7 +80,8 @@ def _streamlines(u, v, bh, zrel, agl, nseed=10, step=15.0, nstep=110):
     return lines
 
 
-def build(engine, code):
+def build(engine, code, wd=None, ws=None):
+    """wd·ws 를 주면 농가의 모든 배출원에 그 바람을 쓴다 (지정 풍향 보기). 없으면 실시간 바람"""
     S = engine.S
     farm = S.at[code, 'farm']
     mem = [c for c in S.index[(S.farm == farm) & (S.role != 'measure')]]
@@ -90,6 +91,7 @@ def build(engine, code):
     inp = {}
     for c in mem:
         w = engine.wind.get(engine.key.get(c))
+        if wd is not None: w = (float(wd) % 360, float(ws) if ws is not None else (w[1] if w is not None else 3.0))
         if w is None: continue
         q = engine.Q.get(c, (0.0, 0))[0]
         inp[c] = (w[0], max(w[1], C.U_MIN), q if q > 0 else _nominal_q(S, c), q <= 0)
@@ -197,4 +199,4 @@ def build(engine, code):
                 suspect=next((C.SUSPECT[c] for c in inp if c in C.SUSPECT), None),     # 데이터 이상 센서 사유 (확산 계산 제외)
                 texture=texture, iso=iso, streamlines=lines, buildings=blds,
                 infer_ms=round((t1 - t0) * 1000, 1), build_ms=round((t2 - t1) * 1000, 1), ts_ms=engine.clock_ms,
-                sigma=sigma, n_dirs=int(len(next(iter(plans.values()))[0])))
+                sigma=sigma, n_dirs=int(len(next(iter(plans.values()))[0])), override=wd is not None)

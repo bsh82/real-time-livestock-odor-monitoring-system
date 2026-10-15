@@ -19,7 +19,15 @@ export default function OpsPage() {
   const s = useStore()
   const [view, setView] = useState<any>(null)
   const [follow, setFollow] = useState(true)
-  const [farm3d, setFarm3d] = useState<string | null>(null)
+  const qs = useMemo(() => new URLSearchParams(window.location.search), [])
+  const [farm3d, setFarm3d] = useState<string | null>(qs.get('farm3d'))
+  // 주소로 연 3D 보기의 지정 바람·시점 (작품 사진·설명용). 다른 농장을 열면 실시간 바람으로 돌아간다
+  const fixed = useMemo(() => {
+    const n = (k: string) => (qs.get(k) != null && qs.get(k) !== '' && Number.isFinite(Number(qs.get(k))) ? Number(qs.get(k)) : null)
+    const wd = n('wd'), ws = n('ws'), az = n('az'), el = n('el'), dist = n('dist'), tx = n('tx'), ty = n('ty')
+    return { code: qs.get('farm3d'), wind: wd != null ? { wd, ws: ws ?? undefined } : null, cam: az != null ? { az, el: el ?? undefined, dist: dist ?? undefined, tx: tx ?? 0, ty: ty ?? 0, rotate: qs.get('rot') !== '0' } : null }
+  }, [qs])
+  useEffect(() => { if (fixed.code) s.set({ selected: fixed.code }) }, [fixed.code, Object.keys(s.sources).length > 0])   // 주소로 연 농장 = 선택 농가
   const [zoom, setZoom] = useState(JEJU_VIEW.zoom)
   const f3 = useRef<string | null>(null); f3.current = farm3d
   const followed = useRef(0)
@@ -66,7 +74,8 @@ export default function OpsPage() {
           {s.toast && <div className={`toast ${s.toast.kind === 'info' ? 'info' : s.toast.kind === 'caution' ? 'caution' : ''}`}>{s.toast.text}</div>}
           <Legend island={zoom < ISLAND_ZOOM} />
           <Provenance />
-          {farm3d && <Farm3D key={farm3d} code={farm3d} onClose={() => setFarm3d(null)} />}
+          {farm3d && <Farm3D key={farm3d} code={farm3d} onClose={() => setFarm3d(null)}
+            wind={farm3d === fixed.code ? fixed.wind : null} cam={farm3d === fixed.code ? fixed.cam : null} />}
         </div>
         <div style={{ display: 'grid', gridTemplateRows: '92px 1fr 372px', gap: 8, minHeight: 0 }}>
           <Counters />
