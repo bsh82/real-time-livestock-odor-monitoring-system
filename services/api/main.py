@@ -385,6 +385,8 @@ def lake_status():
 
 WEB = os.path.join(C.DEMO, 'web', 'dist')
 if os.path.isdir(os.path.join(WEB, 'assets')): app.mount('/assets', StaticFiles(directory=os.path.join(WEB, 'assets')), name='assets')
+BASEMAP = os.path.join(C.DATA, 'basemap')                         # 오프라인 배경 지도 (제주 PMTiles·스프라이트·글리프)
+if os.path.isdir(BASEMAP): app.mount('/basemap', StaticFiles(directory=BASEMAP), name='basemap')
 
 
 @app.get('/{path:path}')

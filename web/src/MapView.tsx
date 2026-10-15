@@ -3,11 +3,23 @@ import DeckGL from '@deck.gl/react'
 import { BitmapLayer, ScatterplotLayer, LineLayer, PolygonLayer, TextLayer } from '@deck.gl/layers'
 import { WebMercatorViewport } from '@deck.gl/core'
 import Map from 'react-map-gl/maplibre'
+import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { Protocol } from 'pmtiles'
+import { layers as baseLayers, namedFlavor } from '@protomaps/basemaps'
 import { useStore, sensorLevel, LEVEL_COLOR, Field, topFarm, clusterAlarm } from './store'
 import { ppmColor } from './colormap'
 
-const STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+/** 배경 지도: 인터넷 없이 — 이 PC 의 제주 PMTiles(OSM 기반 Protomaps, 2026-10-14) + 어두운 테마 + 한글 지명.
+ *  파일은 data/basemap/ (git 제외, 받는 법은 README) 에 있고 API 가 /basemap 으로 내준다. 한글은 브라우저 글꼴로 그린다. */
+maplibregl.addProtocol('pmtiles', new Protocol().tile)
+const STYLE: any = {
+  version: 8,
+  glyphs: `${location.origin}/basemap/fonts/{fontstack}/{range}.pbf`,
+  sprite: `${location.origin}/basemap/sprites/dark`,
+  sources: { protomaps: { type: 'vector', url: `pmtiles://${location.origin}/basemap/jeju.pmtiles`, attribution: '© OpenStreetMap contributors · Protomaps' } },
+  layers: baseLayers('protomaps', namedFlavor('dark'), { lang: 'ko' }),
+}
 export const JEJU_VIEW = { longitude: 126.55, latitude: 33.37, zoom: 9.9, pitch: 0, bearing: 0 }
 export const ISLAND_ZOOM = 11.2            // 이보다 작으면 섬 전체 보기: 확산 위치를 확대 기호로 표시
 const MPP512 = 78271.52                    // deck.gl·MapLibre 512 px 타일 기준 m/px (위도 cos, 2^zoom 으로 나눔)
@@ -121,7 +133,7 @@ export default function MapView({ view, whatif, showParticles = true, showAttrib
         onViewStateChange={(e: any) => setVs(e.viewState)}
         onClick={(info: any) => { if (onPick && info.coordinate && !info.object) onPick(info.coordinate) }}
         getTooltip={({ object }: any) => tooltip(object)}>
-        <Map mapStyle={STYLE} reuseMaps attributionControl={false} onLoad={koreanLabels} />
+        <Map mapStyle={STYLE} reuseMaps attributionControl={false} localIdeographFontFamily="'Noto Sans KR', sans-serif" />
       </DeckGL>
       {showParticles && <Particles vs={vs} sel={selCluster} />}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
@@ -177,14 +189,6 @@ function useLabels(vs: any, size: { w: number; h: number }, island: boolean, hot
     }
     return out
   }, [key, farms, hot])
-}
-
-/** 배경 지도 지명을 한글로 (있으면) */
-function koreanLabels(e: any) {
-  try {
-    const m = e.target
-    for (const l of m.getStyle().layers || []) if (l.type === 'symbol' && l.layout?.['text-field']) m.setLayoutProperty(l.id, 'text-field', ['coalesce', ['get', 'name:ko'], ['get', 'name_ko'], ['get', 'name']])
-  } catch { /* 스타일에 따라 실패해도 무시 */ }
 }
 
 function tooltip(o: any) {

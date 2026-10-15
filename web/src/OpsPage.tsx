@@ -145,7 +145,7 @@ function Legend({ island }: { island: boolean }) {
 function Provenance() {
   const { kpi, fields } = useStore()
   const sigma = Object.values(fields)[0]?.sigma ?? 3
-  const text = `자료: 제주 센서 124곳 실측(2024-11) ×${kpi?.clock?.speed ?? 60} 재생 · 바람 JMA MSM · 배출량 가정값 · 데이터 이상 센서 9개 확산 제외  |  모델: U-FNO+F 바람 → FNO 농도 (CFD 학습 D = νₜ/0.7, 외부 시험 로그 오차 0.33 · R² 0.70) · 풍향 변동 σθ ${sigma}° · 중립·정상 상태 가정  |  지도 © CARTO © OpenStreetMap contributors`
+  const text = `자료: 제주 센서 124곳 실측(2024-11) ×${kpi?.clock?.speed ?? 60} 재생 · 바람 JMA MSM · 배출량 가정값 · 데이터 이상 센서 9개 확산 제외  |  모델: U-FNO+F 바람 → FNO 농도 (CFD 학습 D = νₜ/0.7, 외부 시험 로그 오차 0.33 · R² 0.70) · 풍향 변동 σθ ${sigma}° · 중립·정상 상태 가정  |  지도 © OpenStreetMap contributors · Protomaps`
   return <div className="provenance" title={text}>{text}</div>
 }
 
@@ -240,12 +240,15 @@ function AlarmPanel({ onFocus, onOpen3d }: { onFocus: (a: Alarm) => void; onOpen
 
 /** 선택 농가: 센서 실측 NH₃ · 12시간 추이 · 바람 · 권역 주택 최고 예측 */
 function SelectedFarm({ onOpen3d }: { onOpen3d: (code: string) => void }) {
-  const { selected, sources, sensors, history, fields, alarms, status } = useStore()
-  // 선택이 없을 때 보여 줄 농가: 맨 위 악취 경보의 배출원 (한 번 정하면 선택하기 전까지 유지)
+  const { selected, sources, sensors, history, fields, alarms, status, demo } = useStore()
+  // 선택이 없을 때 보여 줄 농가 (센서 자료가 들어온 뒤 한 번 정하고, 선택하기 전까지 유지):
+  // 맨 위 악취 경보의 배출원 → 시연 배출원 → 자료가 들어오는 (이상 아닌) 배출원
   const latch = useRef<string | null>(null)
-  if (!selected && !latch.current && Object.keys(sources).length) {
+  if (!selected && !latch.current && Object.keys(sources).length && Object.keys(sensors).length) {
     const g = groupAlarms(alarms, sources).odor[0]
-    latch.current = emitterOf(g ? (sources[g.code] ? g.code : topFarm(g.code)?.code) : null) ?? Object.values(sources).find((x) => x.role !== 'measure' && !x.suspect)?.code ?? Object.keys(sources)[0]
+    const live = (c?: string | null) => (c && sensors[c] && status[c] !== 'offline' ? c : undefined)
+    latch.current = live(emitterOf(g ? (sources[g.code] ? g.code : topFarm(g.code)?.code) : null)) ?? live(demo.spike_code)
+      ?? Object.values(sources).find((x) => x.role !== 'measure' && !x.suspect && live(x.code))?.code ?? Object.keys(sources)[0]
   }
   const code = selected || latch.current || ''
   const src = sources[code]; const sv = sensors[code]

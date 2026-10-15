@@ -27,6 +27,7 @@ web/node_modules/
 web/dist/
 web/*.tsbuildinfo
 infra/flink/lib/*.jar
+.tools/
 
 # ---- 비밀 값 ----
 .env

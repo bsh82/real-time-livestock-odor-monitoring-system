@@ -74,5 +74,5 @@
 
 ## 출처
 
-- 배경 지도: © CARTO © OpenStreetMap contributors · 바람: JMA MSM (Open-Meteo) · 지형: Copernicus GLO-30 · 토지피복: ESA WorldCover 2021 · 건물: 국토교통부 NSDI GIS 건물통합정보, Overture Maps
+- 배경 지도: © OpenStreetMap contributors · Protomaps (제주 범위 PMTiles 를 PC 에 저장해 오프라인으로 씀) · 바람: JMA MSM (Open-Meteo) · 지형: Copernicus GLO-30 · 토지피복: ESA WorldCover 2021 · 건물: 국토교통부 NSDI GIS 건물통합정보, Overture Maps
 - FNO: Li et al., *Fourier Neural Operator for Parametric PDEs* (ICLR 2021)

@@ -55,7 +55,7 @@ export default function InsightPage() {
             <div className="overlay" style={{ left: 10, bottom: 10, padding: '5px 10px', fontSize: 12.5, color: 'var(--text-2)' }}>
               <span className="dot" style={{ background: '#d946ef' }} />민원 <span style={{ color: '#e879f9' }}>━</span> 기여 농가 (굵을수록 큼)</div>
           </div>
-          <div className="muted" style={{ fontSize: 11.5, padding: '5px 12px', borderTop: '1px solid var(--line)' }}>민원 기여도·가상 실험 = 확산 모델 예측 (U-FNO+F → FNO · 배출량 가정값 · 중립·정상 상태) · 지도 © CARTO © OpenStreetMap contributors</div>
+          <div className="muted" style={{ fontSize: 11.5, padding: '5px 12px', borderTop: '1px solid var(--line)' }}>민원 기여도·가상 실험 = 확산 모델 예측 (U-FNO+F → FNO · 배출량 가정값 · 중립·정상 상태) · 지도 © OpenStreetMap contributors · Protomaps</div>
         </div>
         <ComplaintPanel selId={selId} onSel={(id) => { setSelId(id); const c = s.complaints.find((x) => x.id === id); if (c) setView({ longitude: c.lon, latitude: c.lat, zoom: 13 }) }} />
         <WhatIf />
