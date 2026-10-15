@@ -56,8 +56,15 @@
    - `data/sites/<code>/`: `.conda\python.exe tools\build_sites.py` (지형·건물·거칠기 래스터, 원자료 경로는 `DEM_SRC`·`NSDI_SHP`·`WORLDCOVER`)
    - `models/runs/...`: `MODEL_REMOTE=<host>:<path> bash tools/pull_models.sh`
    - `data/demo_config.json`: `config/demo_config.example.json` 을 복사해 채움
+   - `data/basemap/`: `bash tools/fetch_basemap.sh` (오프라인 배경 지도 — 제주 PMTiles 약 10 MB, pmtiles CLI 필요)
 6. 처음 한 번: `docker compose up -d` 후 `.conda\python.exe -m services.common.load_meta --history` (센서 메타·이력 → DB, Flink 가 이 표를 참조)
 7. 기동: `powershell -File scripts\start_all.ps1 -Reset -Screens` → http://127.0.0.1:8000/ops , /insight
+
+### 백업 영상 · 시연 자동 진행
+
+`.conda\python.exe tools\demo_record.py <출력 폴더> --only=ops` (그다음 `--only=insight`)
+— 시연 대본(정상 → 배출 급증 → 경보 → 3D → 저감 조치 → 해제 → 민원 → 데이터 흐름 → 가상 실험)을 자동으로 진행하며 화면을 1920×1080 15 fps 로 녹화한다 (NVENC).
+한 번에 한 화면만 그려야 CPU 가 80 % 안에 든다. 녹화하는 동안 `scripts\services.ps1 stop batch` 로 배치를 잠시 멈추면 순간 부하가 줄어든다.
 
 ## 공개하지 않는 것
 
