@@ -8,9 +8,12 @@ import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/600.css'
 import './styles.css'
 import { boot } from './store'
+import { PRINT } from './util'
 import OpsPage from './OpsPage'
 import InsightPage from './InsightPage'
 import Farm3DPage from './Farm3DPage'
+
+if (PRINT) document.documentElement.dataset.theme = 'print'
 
 function App() {
   useEffect(() => { boot() }, [])

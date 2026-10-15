@@ -280,11 +280,11 @@ def config(sigma: float = None):
 
 
 @app.get('/farm3d')
-def farm3d_view(code: str, wd: float | None = None, ws: float | None = None):
+def farm3d_view(code: str, wd: float | None = None, ws: float | None = None, theme: str | None = None):
     if code not in ENGINE.S.index: raise HTTPException(404, 'unknown code')
     if wd is not None and not 0 <= wd <= 360: raise HTTPException(422, 'wd 는 0~360')
     if ws is not None and not 0.5 <= ws <= 20: raise HTTPException(422, 'ws 는 0.5~20 m/s')
-    try: return Response(orjson.dumps(farm3d.build(ENGINE, code, wd, ws), option=orjson.OPT_SERIALIZE_NUMPY), media_type='application/json')
+    try: return Response(orjson.dumps(farm3d.build(ENGINE, code, wd, ws, 'light' if theme == 'light' else None), option=orjson.OPT_SERIALIZE_NUMPY), media_type='application/json')
     except (ValueError, RuntimeError) as e: raise HTTPException(409, str(e))
 
 

@@ -7,6 +7,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { Protocol } from 'pmtiles'
 import { layers as baseLayers, namedFlavor } from '@protomaps/basemaps'
+import { PRINT } from './util'
 import { useStore, sensorLevel, LEVEL_COLOR, Field, topFarm, clusterAlarm } from './store'
 import { ppmColor } from './colormap'
 
@@ -18,7 +19,8 @@ const STYLE: any = {
   glyphs: `${location.origin}/basemap/fonts/{fontstack}/{range}.pbf`,
   sprite: `${location.origin}/basemap/sprites/dark`,
   sources: { protomaps: { type: 'vector', url: `pmtiles://${location.origin}/basemap/jeju.pmtiles`, attribution: '© OpenStreetMap contributors · Protomaps' } },
-  layers: baseLayers('protomaps', namedFlavor('dark'), { lang: 'ko' }),
+  layers: baseLayers('protomaps', namedFlavor(PRINT ? 'light' : 'dark'), { lang: 'ko' })
+    .filter((l: any) => !(PRINT && (String(l.id).includes('shield') || String(l.layout?.['icon-image'] ?? '').includes('shield')))),   // 인쇄용: 다크 아이콘 방패 제외
 }
 export const JEJU_VIEW = { longitude: 126.55, latitude: 33.37, zoom: 9.9, pitch: 0, bearing: 0 }
 export const ISLAND_ZOOM = 11.2            // 이보다 작으면 섬 전체 보기: 확산 위치를 확대 기호로 표시
@@ -85,7 +87,7 @@ export default function MapView({ view, whatif, showParticles = true, showAttrib
       id: 'domain-id', data: Object.values(clusters), getPosition: ((c: any) => corner(c)) as any, getText: (c: any) => c.id,
       getSize: (c: any) => (c.id === selCluster ? 14 : 12), getColor: ((c: any) => { const k = boxCol(c.id); return [k[0], k[1], k[2], 255] }) as any,
       getTextAnchor: 'start', getAlignmentBaseline: 'bottom', getPixelOffset: [2, -2], fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
-      background: true, getBackgroundColor: [8, 13, 22, 200], backgroundPadding: [3, 1], pickable: true,
+      background: true, getBackgroundColor: PRINT ? [255, 255, 255, 225] : [8, 13, 22, 200], backgroundPadding: [3, 1], pickable: true,
       onClick: (info: any) => { if (info.object) set({ selCluster: info.object.id }) },
       updateTriggers: { getColor: [selCluster, cst], getSize: selCluster },
     }),
@@ -113,7 +115,7 @@ export default function MapView({ view, whatif, showParticles = true, showAttrib
     new ScatterplotLayer({
       id: 'sensors', data: pts, pickable: true, getPosition: (p: any) => [p.lon, p.lat],
       getRadius: (p: any) => (p.role === 'measure' ? 3.5 : 5.5) + (p.code === selected ? 3 : 0), radiusUnits: 'pixels',
-      getFillColor: ((p: any) => (p.role === 'measure' ? [15, 23, 42, 255] : [...LEVEL_COLOR[sensorLevel(p.code)], 235])) as any,
+      getFillColor: ((p: any) => (p.role === 'measure' ? (PRINT ? [255, 255, 255, 255] : [15, 23, 42, 255]) : [...LEVEL_COLOR[sensorLevel(p.code)], 235])) as any,
       getLineColor: ((p: any) => (p.role === 'measure' ? [...LEVEL_COLOR[sensorLevel(p.code)], 255] : p.code === selected ? [255, 255, 255, 255] : [8, 12, 20, 255])) as any,
       stroked: true, lineWidthMinPixels: 1.5,
       onClick: (info: any) => { if (!info.object) return; set({ selected: info.object.code, selCluster: info.object.cluster }); onSensorClick?.(info.object.code) },

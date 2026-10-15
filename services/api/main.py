@@ -326,8 +326,9 @@ def set_config(body: dict = Body(...)):
 
 
 @app.get('/api/farm3d')
-def farm3d(code: str, wd: float | None = None, ws: float | None = None):
-    p = dict(code=code, **({'wd': wd} if wd is not None else {}), **({'ws': ws} if ws is not None else {}))   # 지정 풍향 보기 (없으면 실시간)
+def farm3d(code: str, wd: float | None = None, ws: float | None = None, theme: str | None = None):
+    p = dict(code=code, **({'wd': wd} if wd is not None else {}), **({'ws': ws} if ws is not None else {}),   # 지정 풍향 보기 (없으면 실시간)
+             **({'theme': 'light'} if theme == 'light' else {}))                                           # 인쇄용 밝은 지형
     try: r = httpx.get(f'{C.ENGINE_URL}/farm3d', params=p, timeout=30)
     except httpx.HTTPError: raise HTTPException(503, '확산 엔진에 연결하는 중입니다. 잠시 후 자동으로 다시 시도합니다.')
     if r.status_code != 200:

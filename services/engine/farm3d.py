@@ -80,7 +80,7 @@ def _streamlines(u, v, bh, zrel, agl, nseed=10, step=15.0, nstep=110):
     return lines
 
 
-def build(engine, code, wd=None, ws=None):
+def build(engine, code, wd=None, ws=None, theme=None):
     """wd·ws 를 주면 농가의 모든 배출원에 그 바람을 쓴다 (지정 풍향 보기). 없으면 실시간 바람"""
     S = engine.S
     farm = S.at[code, 'farm']
@@ -156,7 +156,10 @@ def build(engine, code, wd=None, ws=None):
     z5 = WD.read_tif(f'{C.DATA}/sites/{base}/terrain_5m.tif')
     hs = viz.hillshade(z5, 5.0)
     rel5 = (z5 - z5.min()) / max(z5.max() - z5.min(), 1.0)
-    base_rgb = np.stack([22 + 50 * hs + 25 * rel5, 30 + 58 * hs + 20 * rel5, 40 + 62 * hs + 10 * rel5], -1)
+    if theme == 'light':                                                     # 인쇄용: 밝은 회색 음영기복
+        base_rgb = np.stack([150 + 95 * hs - 18 * rel5, 156 + 92 * hs - 14 * rel5, 165 + 86 * hs - 8 * rel5], -1)
+    else:
+        base_rgb = np.stack([22 + 50 * hs + 25 * rel5, 30 + 58 * hs + 20 * rel5, 40 + 62 * hs + 10 * rel5], -1)
     c5 = np.kron(volw[0], np.ones((2, 2), np.float32)); c5 = ndimage.uniform_filter(c5, 3)
     ov = viz.colorize(c5).astype(np.float32); a = ov[..., 3:4] / 255.0 * 0.95
     tex = (base_rgb * (1 - a) + ov[..., :3] * a).clip(0, 255).astype(np.uint8)[::-1]

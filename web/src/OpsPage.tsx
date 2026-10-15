@@ -6,7 +6,7 @@ import MapView, { JEJU_VIEW, ISLAND_ZOOM } from './MapView'
 import { useStore, sensorLevel, LEVEL_COLOR, KIND_KO, LEVEL_KO, label, post, Alarm, AlarmGroup, groupAlarms, topFarm, clusterCenter, clusterAlarm, emitterOf } from './store'
 import Farm3D from './Farm3D'
 import { legendGradient, LEGEND_TICKS_MAIN, fmtPpm, fmtPpmU } from './colormap'
-import { dir16 } from './util'
+import { dir16, PRINT } from './util'
 export { dir16 }
 
 const rgb = (l: string) => `rgb(${LEVEL_COLOR[l].join(',')})`
@@ -136,7 +136,7 @@ function Legend({ island }: { island: boolean }) {
   return (
     <div className="overlay legend">
       <div style={{ color: 'var(--text)' }}>예측 NH₃ 농도 · 지상 2 m (ppm)</div>
-      <div style={{ height: 10, borderRadius: 3, marginTop: 6, background: legendGradient(2.2) }} />
+      <div className="keepc" style={{ height: 10, borderRadius: 3, marginTop: 6, background: legendGradient(2.2) }} />
       <div className="mono" style={{ position: 'relative', height: 16, fontSize: 12 }}>
         {LEGEND_TICKS_MAIN.map((t) => <span key={t.v} style={{ position: 'absolute', left: `${t.pos}%`, transform: 'translateX(-50%)' }}>{t.v}</span>)}</div>
       <div>흰 선 = 주택가 예측 0.6 ppm 주의 · 1 ppm 경보</div>
@@ -171,11 +171,14 @@ function Counters() {
     <div className="panel">
       <div className="muted" style={{ fontSize: 12, padding: '5px 10px 0' }}>센서 {Object.keys(sources).length}개 상태</div>
       <div className="counters">
-        {T.map(([k, l, v]) => <div key={k}><span className="n" style={{ color: k === 'off' ? '#94a3b8' : rgb(k) }}>{v}</span><span className="l">{l}</span></div>)}
+        {T.map(([k, l, v]) => <div key={k}><span className="n" style={{ color: k === 'off' ? '#94a3b8' : txtRGB(k) }}>{v}</span><span className="l">{l}</span></div>)}
       </div>
     </div>
   )
 }
+
+/** 상태 글자색. 인쇄용 보기에서는 화면 전체가 밝기 반전되므로 경보 빨강은 밝은 빨강을 줘야 반전 뒤 진한 빨강이 된다 */
+const txtRGB = (l: string) => (PRINT && l === 'warning' ? '#fca5a5' : rgb(l))
 
 const STEPS = ['발생', '확인', '조치', '해제']
 function Stepper({ state }: { state: string }) {
@@ -274,7 +277,7 @@ function SelectedFarm({ onOpen3d }: { onOpen3d: (code: string) => void }) {
     yAxis: { type: 'value', min: 0, max: (v: any) => Math.ceil(Math.max(v.max, (thr ?? 0) * 1.1, 1)), splitLine: { lineStyle: { color: '#16233a' } }, axisLabel: { fontSize: 11 } },
     series: [
       { name: '10분 평균', type: 'line', showSymbol: false, data: hist.map((h) => [h.window_start, h.nh3_avg]), lineStyle: { color: '#38bdf8' }, areaStyle: { color: 'rgba(56,189,248,.10)' },
-        markLine: thr ? { symbol: 'none', silent: true, data: [{ yAxis: thr }], lineStyle: { color: '#ef4444', type: 'dashed' }, label: { formatter: `기준 ${thr.toFixed(1)}`, color: '#fca5a5', fontSize: 11 } } : undefined },
+        markLine: thr ? { symbol: 'none', silent: true, data: [{ yAxis: thr }], lineStyle: { color: PRINT ? '#fca5a5' : '#ef4444', type: 'dashed', width: PRINT ? 2 : 1 }, label: { formatter: `기준 ${thr.toFixed(1)}`, color: '#fca5a5', fontSize: 11 } } : undefined },
       { name: '실시간', type: 'line', showSymbol: false, data: live.map((p) => [p.ts, p.v]), lineStyle: { color: '#fbbf24', width: 1.2 } },
     ],
   }
@@ -285,7 +288,7 @@ function SelectedFarm({ onOpen3d }: { onOpen3d: (code: string) => void }) {
         <button className="primary" style={{ marginLeft: 'auto' }} onClick={() => onOpen3d(emitterOf(code) ?? code)}>3D 보기</button></h3>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 14px 0' }}>
         <span className="muted" style={{ fontSize: 13 }}>센서 실측 NH₃</span>
-        <span className="mono" style={{ fontSize: 28, fontWeight: 700, color: lv === 'ok' ? '#f1f5f9' : rgb(lv) }}>{status[code] === 'offline' ? '두절' : sv ? sv.nh3.toFixed(1) : '–'}</span>
+        <span className="mono" style={{ fontSize: 28, fontWeight: 700, color: lv === 'ok' ? '#f1f5f9' : txtRGB(lv) }}>{status[code] === 'offline' ? '두절' : sv ? sv.nh3.toFixed(1) : '–'}</span>
         <span className="muted">ppm</span>
         {thr ? <span className="muted" style={{ fontSize: 12 }}>이 센서 기준 {thr.toFixed(1)}</span> : null}
         <span className={`pill ${lv === 'off' ? 'fault' : lv}`} style={{ marginLeft: 'auto' }}>{LV_KO[lv]}</span>

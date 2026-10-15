@@ -248,11 +248,11 @@ function DataFlow() {
   ] as const
   const opt = {
     backgroundColor: 'transparent', textStyle: { color: '#9fb2cc' }, grid: { left: 40, right: 14, top: 26, bottom: 26 }, tooltip: { trigger: 'axis' },
-    legend: { right: 8, top: 0, textStyle: { color: '#9fb2cc', fontSize: 12 } },
+    legend: { right: 8, top: 0, icon: 'roundRect', itemWidth: 14, itemHeight: 4, textStyle: { color: '#9fb2cc', fontSize: 12 } },
     xAxis: { type: 'category', data: monthly.map((m) => dayjs(m.month).format('YY-MM')), axisLine: { lineStyle: { color: '#2a3b57' } }, axisLabel: { fontSize: 11 } },
     yAxis: { type: 'value', splitLine: { lineStyle: { color: '#16233a' } }, axisLabel: { fontSize: 11 } },
-    series: [{ name: '평균', type: 'line', data: monthly.map((m) => m.nh3_avg), smooth: true, showSymbol: false, lineStyle: { color: '#38bdf8' } },
-      { name: '상위 5%', type: 'line', data: monthly.map((m) => m.nh3_p95), smooth: true, showSymbol: false, lineStyle: { color: '#f97316' } }],
+    series: [{ name: '평균', type: 'line', data: monthly.map((m) => m.nh3_avg), smooth: true, showSymbol: false, lineStyle: { color: '#38bdf8' }, itemStyle: { color: '#38bdf8' } },
+      { name: '상위 5%', type: 'line', data: monthly.map((m) => m.nh3_p95), smooth: true, showSymbol: false, lineStyle: { color: '#f97316' }, itemStyle: { color: '#f97316' } }],
   }
   return (
     <div className="panel">

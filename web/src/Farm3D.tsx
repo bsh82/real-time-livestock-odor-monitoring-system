@@ -3,19 +3,22 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ppmColor, fmtPpm, fmtPpmU, legendGradient, LEGEND_TICKS_MAIN } from './colormap'
-import { dir16 } from './util'
+import { dir16, PRINT } from './util'
 
 /** 농장 1곳의 3D 확산 보기: 지형(음영기복 + 지상 2 m 농도), 건물, 등농도면(0~50 m), U-FNO 바람 유선과 흐르는 입자.
  *  20초마다 새 자료를 받되, 재질(셰이더)은 처음 만든 것을 계속 쓰고 형상·텍스처만 바꿔서 갱신할 때 멈춤·깜빡임이 없게 한다. */
 type Wind = { wd: number; ws?: number }
 type Cam = { az: number; el?: number; dist?: number; tx?: number; ty?: number; rotate?: boolean }    // 카메라 방위(북 0°, 시계 방향)·고도각·거리·바라보는 점(동·북 m)
 type Props = { code: string; onClose: () => void; wind?: Wind | null; cam?: Cam | null }
-const BLD_COL: Record<string, string> = { home: '#e2e8f0', exposed: '#ef4444', school: '#60a5fa', care: '#a78bfa', barn: '#b7791f', other: '#5b6b82' }
+const BLD_COL: Record<string, string> = PRINT
+  ? { home: '#475569', exposed: '#dc2626', school: '#2563eb', care: '#7c3aed', barn: '#b45309', other: '#94a3b8' }     // 인쇄용: 밝은 지형 위
+  : { home: '#e2e8f0', exposed: '#ef4444', school: '#60a5fa', care: '#a78bfa', barn: '#b7791f', other: '#5b6b82' }
+const BG = PRINT ? '#f4f6f9' : '#05080f'
 const ISO_OPACITY = [0.17, 0.28, 0.45]
 const EXAG = 3                                         // 높이 과장 (고정)
 
 async function fetchScene(code: string, wind?: Wind | null) {
-  const q = new URLSearchParams({ code }); if (wind) { q.set('wd', String(wind.wd)); if (wind.ws != null) q.set('ws', String(wind.ws)) }
+  const q = new URLSearchParams({ code }); if (PRINT) q.set('theme', 'light'); if (wind) { q.set('wd', String(wind.wd)); if (wind.ws != null) q.set('ws', String(wind.ws)) }
   const r = await fetch(`/api/farm3d?${q}`)
   const text = await r.text(); let j: any = null
   try { j = JSON.parse(text) } catch { /* 본문이 JSON 이 아님 */ }
@@ -28,6 +31,7 @@ async function fetchScene(code: string, wind?: Wind | null) {
 export default function Farm3D({ code, onClose, wind, cam }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const ctx = useRef<any>(null)
+  const compass = useRef<HTMLDivElement>(null)
   const [scene, setScene] = useState<{ d: any; tex: THREE.Texture } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -62,33 +66,35 @@ export default function Farm3D({ code, onClose, wind, cam }: Props) {
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); renderer.setSize(el.clientWidth, el.clientHeight)
     renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.domElement.classList.add('keepc')                // 인쇄용 보기에서 반전하지 않음
     el.appendChild(renderer.domElement)
-    const sc = new THREE.Scene(); sc.background = new THREE.Color('#05080f'); sc.fog = new THREE.Fog('#05080f', 5000, 11000)
+    const sc = new THREE.Scene(); sc.background = new THREE.Color(BG); sc.fog = new THREE.Fog(BG, 5000, 11000)
     const camera = new THREE.PerspectiveCamera(40, el.clientWidth / el.clientHeight, 5, 40000)
     camera.up.set(0, 0, 1); camera.position.set(-1500, -2300, 1500)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.target.set(0, 0, 80); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495; controls.autoRotateSpeed = 0.5
     controls.minDistance = 200; controls.maxDistance = 9000
-    const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x0d1117, 1.1); hemi.position.set(0, 0, 1); sc.add(hemi)     // z 가 위쪽
+    const hemi = new THREE.HemisphereLight(0xcfe3ff, PRINT ? 0x9aa5b4 : 0x0d1117, 1.1); hemi.position.set(0, 0, 1); sc.add(hemi)     // z 가 위쪽
     const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(-1500, 1800, 2600); sc.add(sun)
     const world = new THREE.Group(); sc.add(world)
     // 재질은 한 번만 만들어 계속 쓴다 (갱신 때 셰이더를 다시 컴파일하지 않게)
     const dot = document.createElement('canvas'); dot.width = dot.height = 32
     const g2 = dot.getContext('2d')!; const grd = g2.createRadialGradient(16, 16, 0, 16, 16, 16)
-    grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.4, 'rgba(224,242,254,0.8)'); grd.addColorStop(1, 'rgba(224,242,254,0)')
+    if (PRINT) { grd.addColorStop(0, 'rgba(15,23,42,1)'); grd.addColorStop(0.4, 'rgba(30,58,138,0.8)'); grd.addColorStop(1, 'rgba(30,58,138,0)') }
+    else { grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.4, 'rgba(224,242,254,0.8)'); grd.addColorStop(1, 'rgba(224,242,254,0)') }
     g2.fillStyle = grd; g2.fillRect(0, 0, 32, 32)
     const mats: Record<string, THREE.Material> = {
       terrain: new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 }),
-      lines: new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.26, depthWrite: false }),
-      points: new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, map: new THREE.CanvasTexture(dot), transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending }),
+      lines: new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: PRINT ? 0.42 : 0.26, depthWrite: false }),
+      points: new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, map: new THREE.CanvasTexture(dot), transparent: true, opacity: 0.95, depthWrite: false, blending: PRINT ? THREE.NormalBlending : THREE.AdditiveBlending }),
       src: new THREE.MeshStandardMaterial({ color: '#f43f5e', emissive: '#be123c', emissiveIntensity: 0.9 }),
       beam: new THREE.MeshBasicMaterial({ color: '#fb7185', transparent: true, opacity: 0.55 }),
     }
     Object.entries(BLD_COL).forEach(([k, col]) => (mats[`bld:${k}`] = new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0.05, emissive: k === 'exposed' ? '#7f1d1d' : '#000000' })))
     ISO_OPACITY.forEach((o, k) => (mats[`iso:${k}`] = new THREE.MeshPhongMaterial({ transparent: true, opacity: o, side: THREE.DoubleSide, depthWrite: false, shininess: 60 })))
-    const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 420, 0x7dd3fc, 120, 80); arrow.userData.keepShape = true
-    const north = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-1080, -1080, 5), 220, 0xe2e8f0, 60, 40); north.userData.keepShape = true
-    sc.add(arrow, north)
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 420, PRINT ? 0x004b74 : 0x7dd3fc, 120, 80); arrow.userData.keepShape = true
+    const north = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-1080, -1080, 5), 220, PRINT ? 0x1e293b : 0xe2e8f0, 60, 40); north.userData.keepShape = true
+    sc.add(arrow); if (!PRINT) sc.add(north)                 // 인쇄용은 북쪽 화살표 대신 화면 나침반
     const ro = new ResizeObserver(() => {
       if (!el.clientWidth || !el.clientHeight) return
       renderer.setSize(el.clientWidth, el.clientHeight); camera.aspect = el.clientWidth / el.clientHeight; camera.updateProjectionMatrix()
@@ -98,7 +104,14 @@ export default function Farm3D({ code, onClose, wind, cam }: Props) {
     world.scale.z = EXAG
     ctx.current = c
     let raf = 0
-    const loop = () => { controls.update(); stepParticles(c); renderer.render(sc, camera); raf = requestAnimationFrame(loop) }
+    const loop = () => {
+      controls.update(); stepParticles(c); renderer.render(sc, camera)
+      if (compass.current) {                                // 나침반: 카메라가 바라보는 방위만큼 N 을 돌린다
+        const b = Math.atan2(controls.target.x - camera.position.x, controls.target.y - camera.position.y)
+        compass.current.style.transform = `rotate(${(-b * 180) / Math.PI}deg)`
+      }
+      raf = requestAnimationFrame(loop)
+    }
     raf = requestAnimationFrame(loop)
     return () => {
       cancelAnimationFrame(raf); ro.disconnect(); disposeGeometries(world); c.tex?.dispose()
@@ -122,8 +135,10 @@ export default function Farm3D({ code, onClose, wind, cam }: Props) {
   // 바람 세기를 켜면 유선도 켠다 / 유선을 끄면 바람 세기도 끈다
   const tog = (k: string) => setShow(k === 'ratio' ? { ...show, ratio: !show.ratio, wind: show.wind || !show.ratio } : k === 'wind' ? { ...show, wind: !show.wind, ratio: show.wind ? false : show.ratio } : { ...show, [k]: !show[k] })
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: '#05080f', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: PRINT ? '#0b0906' : '#05080f', borderRadius: 10, overflow: 'hidden' }}>
       <div ref={host} style={{ position: 'absolute', inset: 0 }} />
+      {PRINT && <div style={{ position: 'absolute', right: 22, top: 64, width: 54, height: 54, borderRadius: '50%', border: '2px solid #cbd5e1', background: 'rgba(13,20,32,.6)', pointerEvents: 'none' }}>
+        <div ref={compass} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 3, color: '#e2e8f0', fontWeight: 700, fontSize: 14, lineHeight: 1 }}>N<span style={{ fontSize: 18 }}>▲</span></div></div>}
       <div style={{ position: 'absolute', left: 14, top: 12, maxWidth: 'calc(100% - 640px)', minWidth: 420, pointerEvents: 'none' }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>{d ? `${d.farm} · 3D 냄새 확산` : '불러오는 중'}</div>
         {d && <div style={{ fontSize: 13, color: '#9fb2cc', marginTop: 2 }}>{d.loc} · 지형·건물·바람 반영
@@ -148,9 +163,9 @@ export default function Farm3D({ code, onClose, wind, cam }: Props) {
       <div className="overlay" style={{ left: 12, bottom: 40, width: 300, padding: '10px 12px', fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.55 }}>
         <div style={{ color: 'var(--text)' }}>등농도면 (공기 중 0~50 m)</div>
         {d?.iso?.map((s: any, k: number) => { const c = ppmColor(s.ppm); return <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 22, height: 10, borderRadius: 2, background: `rgba(${c[0]},${c[1]},${c[2]},${0.35 + 0.25 * k})` }} />{fmtPpm(s.ppm)} ppm 이상</div> })}
+          <span className="keepc" style={{ width: 22, height: 10, borderRadius: 2, background: `rgba(${c[0]},${c[1]},${c[2]},${0.35 + 0.25 * k})` }} />{fmtPpm(s.ppm)} ppm 이상</div> })}
         <div style={{ color: 'var(--text)', marginTop: 6 }}>지면 색 = 지상 2 m 농도 (ppm)</div>
-        <div style={{ height: 9, borderRadius: 3, background: legendGradient(2.2), marginTop: 3 }} />
+        <div className="keepc" style={{ height: 9, borderRadius: 3, background: legendGradient(2.2), marginTop: 3 }} />
         <div style={{ position: 'relative', height: 16, fontSize: 12 }} className="mono">
           {LEGEND_TICKS_MAIN.map((t) => <span key={t.v} style={{ position: 'absolute', left: `${t.pos}%`, transform: 'translateX(-50%)' }}>{t.v}</span>)}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
@@ -160,7 +175,7 @@ export default function Farm3D({ code, onClose, wind, cam }: Props) {
         {show.ratio
           ? <div style={{ marginTop: 4 }}>바람 세기: <span style={{ color: '#60a5fa' }}>느려짐 0.7×</span> ─ 1× ─ <span style={{ color: '#fb923c' }}>1.3× 빨라짐</span><div className="muted" style={{ fontSize: 12 }}>같은 높이 중앙값 대비 · 지형·건물 영향</div></div>
           : <div style={{ marginTop: 4 }}><span style={{ color: '#7dd3fc' }}>─</span> 바람 유선 (높이 10·30 m)</div>}
-        <div style={{ marginTop: 2 }}><span style={{ color: '#7dd3fc' }}>➤</span> 바람 방향 · <span style={{ color: '#e2e8f0' }}>↑</span> 북쪽 (흰 화살표)</div>
+        <div style={{ marginTop: 2 }}><span style={{ color: '#7dd3fc' }}>➤</span> 바람 방향 · {PRINT ? <>N = 북쪽 (오른쪽 위 나침반)</> : <><span style={{ color: '#e2e8f0' }}>↑</span> 북쪽 (흰 화살표)</>}</div>
       </div>
       {d && <div className="provenance" title="">이 농장 배출원만 계산 · 2 km × 2 km · 배출량 {d.q_total.toFixed(3)} g/s (가정) · 풍향 변동 σθ {d.sigma ?? 3}° · 중립·정상 상태 · 높이 ×{EXAG} 과장 · U-FNO+F 바람 → FNO 농도 (CFD 학습)</div>}
     </div>
@@ -187,7 +202,7 @@ function applyView(c: any, show: Record<string, boolean>) {
   if (f?.lg) {
     const want = show.ratio ? 'ratio' : 'base'
     if (f.cur !== want) { const at = f.lg.getAttribute('color') as THREE.BufferAttribute; (at.array as Float32Array).set(want === 'ratio' ? f.ratio : f.base); at.needsUpdate = true; f.cur = want }
-    ;(c.mats.lines as THREE.LineBasicMaterial).opacity = show.ratio ? 0.65 : 0.26
+    ;(c.mats.lines as THREE.LineBasicMaterial).opacity = show.ratio ? 0.65 : PRINT ? 0.6 : 0.26
   }
   if (c.lastArrow) c.arrow.position.set(c.lastArrow.x, c.lastArrow.y, c.lastArrow.z * c.exag)
   c.north.position.set(-1080, -1080, 5 * c.exag)
@@ -278,6 +293,10 @@ function buildScene(c: any, d: any, tex: THREE.Texture) {
 
 function windRGB(s: number, agl: number) {
   const t = Math.min(1, s / 7)
+  if (PRINT) {                                                        // 인쇄용: 밝은 지형 위 진한 파랑(10 m) · 보라(30 m), 빠를수록 진하게
+    const p = agl < 20 ? [0.05, 0.36, 0.66] : [0.36, 0.2, 0.62]
+    return p.map((v) => v * (1 - 0.5 * t))
+  }
   const lo = agl < 20 ? [0.22, 0.74, 0.97] : [0.65, 0.55, 0.98]       // 10 m 하늘색 / 30 m 보라
   return [lo[0] + (1 - lo[0]) * t * 0.7, lo[1] + (1 - lo[1]) * t * 0.7, lo[2] + (1 - lo[2]) * t * 0.7]
 }

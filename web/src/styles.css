@@ -149,3 +149,11 @@ details > summary { list-style: none; } details > summary::-webkit-details-marke
 .goldkpis .gk .l { font-size: 12px; color: var(--text-2); }
 .goldkpis .gk .v { font-family: var(--mono); font-size: 22px; color: #fbbf24; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .goldkpis .gk .s { font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 인쇄용 보기 (?theme=print): 화면 전체를 '색상은 그대로, 밝기만 반전' (어두운 바탕 → 흰 바탕, 밝은 글자 → 짙은 글자).
+   데이터 색(지도·3D 캔버스, 범례 색 막대, 상태 점)은 같은 필터를 한 번 더 걸어 거의 원래 색으로 되돌린다 (hue-rotate 의 색역 잘림 때문에
+   채도 높은 빨강·노랑은 조금 탁해진다 — 지도·범례·3D 가 같이 바뀌므로 서로는 맞다). 지도·3D 는 밝은 장면으로 따로 그린다 */
+html[data-theme=print] { --text-3: #aab8cb; }
+html[data-theme=print], html[data-theme=print] body { background: #fff; }
+html[data-theme=print] #root { filter: invert(1) hue-rotate(180deg); }
+html[data-theme=print] .maplibregl-canvas, html[data-theme=print] #deckgl-overlay, html[data-theme=print] .keepc, html[data-theme=print] .dot { filter: invert(1) hue-rotate(180deg); }
