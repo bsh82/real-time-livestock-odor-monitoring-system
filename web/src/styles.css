@@ -141,3 +141,11 @@ details > summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 details > summary { list-style: none; } details > summary::-webkit-details-marker { display: none; }
 .counters { padding: 4px 8px 8px; }
 .counters .n { font-size: 24px; }
+
+/* 통계 화면: 보기 전환 · 골드 통계 지표 */
+.seg { display: flex; gap: 0; } .seg button { border-radius: 0; } .seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.goldkpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.goldkpis .gk { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; min-width: 0; }
+.goldkpis .gk .l { font-size: 12px; color: var(--text-2); }
+.goldkpis .gk .v { font-family: var(--mono); font-size: 22px; color: #fbbf24; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goldkpis .gk .s { font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

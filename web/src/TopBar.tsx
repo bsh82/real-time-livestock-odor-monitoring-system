@@ -1,8 +1,9 @@
+import type { ReactNode } from 'react'
 import dayjs from 'dayjs'
 import { useStore } from './store'
 
 /** 상단 막대: 이름 · 재생 시각 · (관제 화면만) 핵심 지표 3개 · 시스템 상태 한 줄 */
-export default function TopBar({ title, kpis = true }: { title: string; kpis?: boolean }) {
+export default function TopBar({ title, kpis = true, extra }: { title: string; kpis?: boolean; extra?: ReactNode }) {
   const { kpi, connected } = useStore()
   const clk = kpi?.clock?.replay_ms ? dayjs(kpi.clock.replay_ms) : null
   const eng = kpi?.engine || {}
@@ -14,6 +15,7 @@ export default function TopBar({ title, kpis = true }: { title: string; kpis?: b
       <div className="brand"><b>OdorTwin</b><span>{title}</span></div>
       <div className="clock">{clk ? clk.format('YYYY-MM-DD HH:mm') : '--:--'}</div>
       {kpi?.clock?.paused ? <span className="badge paused">일시정지</span> : <span className="badge live">실측 재생 ×{kpi?.clock?.speed ?? '-'}</span>}
+      {extra}
       <div className="kpis">
         {kpis && <>
           <K l="센서 수신" v={`${kpi?.sensors_live ?? '-'}/${kpi?.sensors_total ?? '-'}`} />

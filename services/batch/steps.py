@@ -118,7 +118,7 @@ SILVER = {
     'silver.dispersion': 'CREATE OR REPLACE TABLE lake.silver.dispersion AS SELECT * FROM ts.public.dispersion',
     'silver.complaints': "CREATE OR REPLACE TABLE lake.silver.complaints AS SELECT id, ts, lat, lon, place, intensity, status, json_format(attribution) AS attribution FROM ts.public.complaints",
 }
-# 실시간 재생 구간에서 나오는 gold (5분마다): 이름 → (SQL, 앞선 silver)
+# 실시간 재생 구간에서 나오는 gold (5분마다): 이름 → (SQL, 앞선 silver). 일·월·시각은 한국 시간(Asia/Seoul) 기준으로 묶는다
 GOLD_STREAM = {
     'gold.cluster_exposure': ("""CREATE OR REPLACE TABLE lake.gold.cluster_exposure AS
         SELECT cluster, round(count_if(homes_06 > 0) / 6.0, 1) AS exposure_hours, max(homes_06) AS max_homes, round(max(cmax_ppm), 2) AS cmax_ppm,
@@ -130,21 +130,21 @@ GOLD_STREAM = {
         SELECT coalesce(json_extract_scalar(attribution, '$.sources[0].farm'), '(미상)') AS top_farm, count(*) AS n, round(avg(intensity), 1) AS intensity
         FROM lake.silver.complaints GROUP BY 1""", 'silver.complaints'),
     'gold.daily_stream': ("""CREATE OR REPLACE TABLE lake.gold.daily_stream AS
-        SELECT date_trunc('day', e.ts) AS day, count(*) AS readings, round(avg(e.nh3), 3) AS nh3_avg, round(sum(e.q_gs) * 60 / 1000, 2) AS emission_kg,
+        SELECT date_trunc('day', e.ts AT TIME ZONE 'Asia/Seoul') AS day, count(*) AS readings, round(avg(e.nh3), 3) AS nh3_avg, round(sum(e.q_gs) * 60 / 1000, 2) AS emission_kg,
                count(DISTINCT e.code) AS sources FROM lake.silver.emission e GROUP BY 1""", 'silver.emission'),
 }
 # 2년 이력에서 나오는 gold (하루 1번이면 충분)
 GOLD_HISTORY = {
     'gold.monthly_trend': """CREATE OR REPLACE TABLE lake.gold.monthly_trend AS
-        SELECT date_trunc('month', hour) AS month, round(avg(nh3_avg), 3) AS nh3_avg, round(approx_percentile(nh3_avg, 0.95), 3) AS nh3_p95,
-               count(DISTINCT code) AS sensors, round(count_if(nh3_avg > 5) / 1.0, 0) AS hours_over_5ppm
+        SELECT date_trunc('month', hour AT TIME ZONE 'Asia/Seoul') AS month, round(avg(nh3_avg), 3) AS nh3_avg, round(approx_percentile(nh3_avg, 0.95), 3) AS nh3_p95,
+               count(DISTINCT code) AS sensors, round(count_if(nh3_avg > 5) / 1.0, 0) AS hours_over_5ppm, count(*) AS data_hours   -- 둘 다 센서·시간
         FROM lake.silver.sensor_hourly_history WHERE role <> 'measure' GROUP BY 1""",
     'gold.farm_rank': """CREATE OR REPLACE TABLE lake.gold.farm_rank AS
         SELECT row_number() OVER (ORDER BY avg(nh3_avg) DESC) AS rank, farm, count(DISTINCT code) AS sensors, round(avg(nh3_avg), 3) AS nh3_avg,
                round(max(nh3_max), 2) AS nh3_max, count_if(nh3_avg > 5) AS hours_over_5ppm, count(*) AS data_hours
         FROM lake.silver.sensor_hourly_history WHERE role <> 'measure' AND nh3_max < 100 GROUP BY farm""",
     'gold.hourly_profile': """CREATE OR REPLACE TABLE lake.gold.hourly_profile AS
-        SELECT hour(hour) AS hour, round(avg(nh3_avg), 3) AS nh3_avg, round(avg(temp_avg), 2) AS temp_avg
+        SELECT hour(hour AT TIME ZONE 'Asia/Seoul') AS hour, round(avg(nh3_avg), 3) AS nh3_avg, round(avg(temp_avg), 2) AS temp_avg
         FROM lake.silver.sensor_hourly_history WHERE role <> 'measure' GROUP BY 1""",
 }
 ALL = {**SILVER, **{k: v[0] for k, v in GOLD_STREAM.items()}, **GOLD_HISTORY}

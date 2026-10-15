@@ -6,12 +6,7 @@ import MapView from './MapView'
 import { useStore, post, clusterCenter, STATE_KO } from './store'
 import { dir16 } from './util'
 import { fmtPpmU } from './colormap'
-
-function useStat(name: string, every = 30000) {
-  const [d, setD] = useState<any[]>([])
-  useEffect(() => { const load = () => fetch(`/api/stats/${name}`).then((r) => r.json()).then((x) => Array.isArray(x) && setD(x)).catch(() => {}); load(); const t = setInterval(load, every); return () => clearInterval(t) }, [name])
-  return d
-}
+import GoldStats, { useStat } from './GoldStats'
 
 let seeded = false                      // 예시 민원은 화면을 열 때 한 번만
 
@@ -21,6 +16,7 @@ export default function InsightPage() {
   const STORY_CLUSTER = s.demo.story_cluster
   const [selId, setSelId] = useState<number | null>(null)
   const [pick, setPick] = useState(false)
+  const [tab, setTab] = useState<'ops' | 'gold'>('ops')    // 운영(지도·민원·가상 실험) | 골드 통계
   const c0 = clusterCenter(STORY_CLUSTER)
   const [view, setView] = useState<any>(c0 ? { longitude: c0[0], latitude: c0[1], zoom: 11.4 } : { longitude: 126.3, latitude: 33.38, zoom: 11.2 })
   useEffect(() => { const c = clusterCenter(STORY_CLUSTER); if (c && !s.complaints.length) setView({ longitude: c[0], latitude: c[1], zoom: 11.4 }) }, [Object.keys(s.clusters).length])
@@ -41,9 +37,12 @@ export default function InsightPage() {
   const w = s.whatif
   return (
     <div className="app">
-      <TopBar title="통계 · 민원 · 시스템" kpis={false} />
+      <TopBar title="통계 · 민원 · 시스템" kpis={false} extra={<div className="seg">
+        <button className={tab === 'ops' ? 'primary' : ''} onClick={() => setTab('ops')}>운영 · 민원</button>
+        <button className={tab === 'gold' ? 'primary' : ''} onClick={() => setTab('gold')}>골드 통계</button></div>} />
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 1fr', gridTemplateRows: '540px 1fr', gap: 8, padding: 8, minHeight: 0 }}>
-        <div style={{ gridRow: '1 / 3', minHeight: 0, display: 'grid' }}><StoryRail pick={pick} setPick={setPick} /></div>
+        <div style={{ gridRow: '1 / 3', minHeight: 0, display: 'grid' }}><StoryRail pick={pick} setPick={setPick} tab={tab} setTab={setTab} /></div>
+        {tab === 'gold' ? <div style={{ gridColumn: '2 / 4', gridRow: '1 / 3', minHeight: 0, display: 'grid' }}><GoldStats /></div> : <>
         <div className="panel">
           <h3>지도
             {w ? <><span className="pill caution">가상 실험 · {w.cluster} {dir16(w.wd)} {Number(w.ws).toFixed(1)} m/s</span>
@@ -60,13 +59,14 @@ export default function InsightPage() {
         <ComplaintPanel selId={selId} onSel={(id) => { setSelId(id); const c = s.complaints.find((x) => x.id === id); if (c) setView({ longitude: c.lon, latitude: c.lat, zoom: 13 }) }} />
         <WhatIf />
         <DataFlow />
+        </>}
       </div>
     </div>
   )
 }
 
 /** 왼쪽: 발표자용 시연 순서 */
-function StoryRail({ pick, setPick }: { pick: boolean; setPick: (v: boolean) => void }) {
+function StoryRail({ pick, setPick, tab, setTab }: { pick: boolean; setPick: (v: boolean) => void; tab: 'ops' | 'gold'; setTab: (t: 'ops' | 'gold') => void }) {
   const { kpi, sensors, alarms, set, demo, sources } = useStore()
   const SPIKE_CODE = demo.spike_code ?? ''; const spikeFarm = sources[SPIKE_CODE]?.farm ?? '지정 농가'
   const OFF_CODE = demo.offline_code ?? ''; const offFarm = sources[OFF_CODE]?.farm ?? '지정 게이트웨이'
@@ -98,7 +98,8 @@ function StoryRail({ pick, setPick }: { pick: boolean; setPick: (v: boolean) => 
           <div className="desc">민원 지점의 예측 농도를 농가별로 분해</div>
           <div className="btns"><button className="primary" onClick={() => sc(SPIKE_CODE ? { cmd: 'complaint', code: SPIKE_CODE, place: `${spikeFarm} 인근 주민` } : { cmd: 'complaint', cluster: demo.story_cluster, place: '인근 주민' })}>민원 발생</button></div></div>
         <div className="step"><div className="h"><span className="no">6</span>데이터 흐름 · 레이크하우스</div>
-          <div className="desc">오른쪽 아래: 실시간 스트림 + 배치(Airflow · Iceberg)</div></div>
+          <div className="desc">오른쪽 아래: 실시간 스트림 + 배치(Airflow · Iceberg) → gold 표 통계</div>
+          <div className="btns"><button className={tab === 'gold' ? 'primary' : ''} onClick={() => setTab(tab === 'gold' ? 'ops' : 'gold')}>{tab === 'gold' ? '운영 화면으로' : '골드 통계 보기'}</button></div></div>
         <div className="step"><div className="h"><span className="no">7</span>가상 실험</div>
           <div className="desc">가운데 아래: GPU 수 초 vs CFD 35~45분</div></div>
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>

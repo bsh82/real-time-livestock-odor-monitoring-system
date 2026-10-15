@@ -351,7 +351,7 @@ STATS = {
     'monthly': 'SELECT * FROM lake.gold.monthly_trend ORDER BY month',
     'farm_rank': 'SELECT * FROM lake.gold.farm_rank ORDER BY rank LIMIT 20',
     'hourly_profile': 'SELECT * FROM lake.gold.hourly_profile ORDER BY hour',
-    'cluster_exposure': 'SELECT * FROM lake.gold.cluster_exposure ORDER BY exposure_hours DESC',
+    'cluster_exposure': 'SELECT * FROM lake.gold.cluster_exposure ORDER BY exposure_hours DESC, cmax_ppm DESC, cluster',
     'alarm_summary': 'SELECT * FROM lake.gold.alarm_summary ORDER BY n DESC',
     'complaint_summary': 'SELECT * FROM lake.gold.complaint_summary ORDER BY n DESC',
     'daily_stream': 'SELECT * FROM lake.gold.daily_stream ORDER BY day',
@@ -380,7 +380,9 @@ def lake_status():
     runs = [jsonable(r) for r in q('SELECT * FROM batch_runs ORDER BY id DESC LIMIT 20') or []]
     try: snaps = trino_query('SELECT committed_at, snapshot_id, operation FROM lake.gold."daily_stream$snapshots" ORDER BY committed_at DESC LIMIT 10')
     except Exception: snaps = []
-    return dict(runs=runs, snapshots=snaps, airflow=airflow_status())
+    try: n_snap = trino_query('SELECT count(*) AS n FROM lake.gold."daily_stream$snapshots"')[0]['n']
+    except Exception: n_snap = None
+    return dict(runs=runs, snapshots=snaps, snapshot_count=n_snap, airflow=airflow_status())
 
 
 AIRFLOW_DSN = os.getenv('AIRFLOW_DB_DSN', C.PG_DSN.rsplit('/', 1)[0] + '/airflow')
