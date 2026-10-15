@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 DEMO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OPK = os.path.dirname(DEMO)
 DATA = os.path.join(DEMO, 'data')
-RUNTIME = os.path.join(DEMO, 'runtime'); os.makedirs(RUNTIME, exist_ok=True)
+RUNTIME = os.getenv('ODORTWIN_RUNTIME', os.path.join(DEMO, 'runtime')); os.makedirs(RUNTIME, exist_ok=True)
 KST = timezone(timedelta(hours=9))
 
 MQTT_HOST = os.getenv('MQTT_HOST', '127.0.0.1'); MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))

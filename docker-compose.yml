@@ -122,7 +122,46 @@ services:
     mem_limit: 2304m
     restart: unless-stopped
 
+  # 배치 오케스트레이션: Airflow 3 (단일 컨테이너 standalone, LocalExecutor, 메타데이터는 TimescaleDB 의 airflow DB)
+  # DAG = orchestration/airflow_dags, 작업 코드 = services/batch/steps.py (읽기 전용으로 붙임). 화면 127.0.0.1:8090
+  airflow:
+    build: ./infra/airflow
+    image: odortwin/airflow:3.3.2
+    command: standalone
+    ports: ["127.0.0.1:8090:8080"]
+    environment:
+      TZ: Asia/Seoul
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://odor:${PG_PASSWORD:-odortwin}@timescaledb:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_ASYNC: postgresql+psycopg_async://odor:${PG_PASSWORD:-odortwin}@timescaledb:5432/airflow   # 비동기 접속도 psycopg 3 로 (asyncpg 불필요)
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "False"
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Seoul
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
+      AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "120"
+      AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: "120"
+      AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "True"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"          # 로그인 없이 (포트가 이 PC 에만 열려 있음)
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-odortwin-local-dev-jwt}
+      AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-odortwin-local-dev-key}
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://localhost:8080/execution/   # 작업 실행기 → 같은 컨테이너의 API 서버
+      PYTHONPATH: /opt/odortwin
+      ODORTWIN_RUNTIME: /tmp/odortwin
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      PG_DSN: postgresql://odor:${PG_PASSWORD:-odortwin}@timescaledb:5432/odor
+    volumes:
+      - ./orchestration/airflow_dags:/opt/airflow/dags:ro
+      - ./services:/opt/odortwin/services:ro
+      - airflow-logs:/opt/airflow/logs
+    depends_on: [timescaledb, trino]
+    cpus: 1.5
+    mem_limit: 2g
+    restart: unless-stopped
+
 volumes:
+  airflow-logs:
   kafka-data:
   ts-data:
   sw-data:

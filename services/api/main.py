@@ -380,7 +380,28 @@ def lake_status():
     runs = [jsonable(r) for r in q('SELECT * FROM batch_runs ORDER BY id DESC LIMIT 20') or []]
     try: snaps = trino_query('SELECT committed_at, snapshot_id, operation FROM lake.gold."daily_stream$snapshots" ORDER BY committed_at DESC LIMIT 10')
     except Exception: snaps = []
-    return dict(runs=runs, snapshots=snaps)
+    return dict(runs=runs, snapshots=snaps, airflow=airflow_status())
+
+
+AIRFLOW_DSN = os.getenv('AIRFLOW_DB_DSN', C.PG_DSN.rsplit('/', 1)[0] + '/airflow')
+
+
+def airflow_status():
+    """Airflow DAG 상태 요약 (메타데이터 DB 읽기 전용). Airflow 가 없으면 None → 화면은 예비 배치로 표시"""
+    try:
+        with psycopg.connect(AIRFLOW_DSN, connect_timeout=2, row_factory=dict_row) as con:
+            dags = con.execute("""SELECT d.dag_id, d.is_paused, d.next_dagrun_create_after AS next_at, r.state, r.start_date, r.end_date, r.run_id
+                FROM dag d LEFT JOIN LATERAL (SELECT state, start_date, end_date, run_id FROM dag_run x WHERE x.dag_id = d.dag_id
+                                              ORDER BY x.start_date DESC NULLS LAST LIMIT 1) r ON true
+                WHERE d.dag_id LIKE 'odortwin%%' ORDER BY d.dag_id""").fetchall()
+            lake = next((d for d in dags if d['dag_id'] == 'odortwin_lakehouse'), None)
+            tasks = con.execute("SELECT state, count(*) AS n FROM task_instance WHERE dag_id='odortwin_lakehouse' AND run_id=%s GROUP BY state",
+                                (lake['run_id'],)).fetchall() if lake and lake['run_id'] else []
+            day = con.execute("""SELECT count(*) FILTER (WHERE state='success') AS ok, count(*) AS n FROM dag_run
+                WHERE dag_id='odortwin_lakehouse' AND start_date > now() - interval '24 hours'""").fetchone()
+        return dict(dags=[jsonable({k: v for k, v in d.items() if k != 'run_id'}) for d in dags], tasks={t['state'] or 'none': t['n'] for t in tasks}, day=day)
+    except Exception:
+        return None
 
 
 WEB = os.path.join(C.DEMO, 'web', 'dist')

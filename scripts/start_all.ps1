@@ -39,6 +39,10 @@ $null = WaitFor "TimescaleDB" 90 { docker compose exec -T timescaledb pg_isready
 $null = WaitFor "Kafka" 120 { docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list *> $null; $LASTEXITCODE -eq 0 }
 $null = WaitFor "Trino" 120 { try { (Invoke-RestMethod http://127.0.0.1:8088/v1/info -TimeoutSec 3).starting -eq $false } catch { $false } }
 $null = WaitFor "Flink" 90 { try { (Invoke-RestMethod http://127.0.0.1:8081/overview -TimeoutSec 3).taskmanagers -ge 1 } catch { $false } }
+# Airflow 메타데이터 DB (예전 볼륨에는 없을 수 있음) → 만든 뒤 Airflow 를 다시 띄운다
+$hasAf = docker compose exec -T timescaledb psql -U odor -d odor -tAc "SELECT 1 FROM pg_database WHERE datname='airflow'"
+if (-not "$hasAf".Trim()) { docker compose exec -T timescaledb psql -U odor -d odor -c "CREATE DATABASE airflow" | Out-Null; docker compose restart airflow *> $null; Write-Host "  airflow DB created" }
+$null = WaitFor "Airflow" 180 { try { (Invoke-RestMethod http://127.0.0.1:8090/api/v2/monitor/health -TimeoutSec 3).scheduler.status -eq "healthy" } catch { $false } }
 
 # 3. 토픽·버킷 (있으면 그대로)
 Step "Kafka topics / S3 bucket"
@@ -84,4 +88,4 @@ if ($Screens) {
     Step "Screens"
     & "$PSScriptRoot\open_screens.ps1"
 }
-Step "done — http://localhost:8000/ops , http://localhost:8000/insight"
+Step "done — http://localhost:8000/ops , http://localhost:8000/insight · Airflow http://127.0.0.1:8090"

@@ -98,7 +98,7 @@ function StoryRail({ pick, setPick }: { pick: boolean; setPick: (v: boolean) => 
           <div className="desc">민원 지점의 예측 농도를 농가별로 분해</div>
           <div className="btns"><button className="primary" onClick={() => sc(SPIKE_CODE ? { cmd: 'complaint', code: SPIKE_CODE, place: `${spikeFarm} 인근 주민` } : { cmd: 'complaint', cluster: demo.story_cluster, place: '인근 주민' })}>민원 발생</button></div></div>
         <div className="step"><div className="h"><span className="no">6</span>데이터 흐름 · 레이크하우스</div>
-          <div className="desc">오른쪽 아래: 실시간 스트림 + 배치(Iceberg)</div></div>
+          <div className="desc">오른쪽 아래: 실시간 스트림 + 배치(Airflow · Iceberg)</div></div>
         <div className="step"><div className="h"><span className="no">7</span>가상 실험</div>
           <div className="desc">가운데 아래: GPU 수 초 vs CFD 35~45분</div></div>
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -170,6 +170,9 @@ function byFarm(src?: any[]) {
   return Object.values(m).sort((a, b) => b.share - a.share)
 }
 
+const AF_KO: Record<string, string> = { success: '성공', running: '실행 중', failed: '실패', queued: '대기' }
+const AF_COL: Record<string, string> = { success: '#22c55e', running: '#38bdf8', failed: '#ef4444', queued: '#f59e0b' }
+
 const DIRS: [string, number][] = [['북', 0], ['북동', 45], ['동', 90], ['남동', 135], ['남', 180], ['남서', 225], ['서', 270], ['북서', 315]]
 /** 가상 실험: 바람이 바뀌면? GPU 계산 시간 vs CFD */
 function WhatIf() {
@@ -234,6 +237,7 @@ function DataFlow() {
   }, [tables])
   const man = (v?: number) => (v == null ? '-' : v >= 1e4 ? `${(v / 1e4).toFixed(v >= 1e6 ? 0 : 1)}만` : `${v}`)
   const run = lake.runs?.[0]
+  const af = lake.airflow; const afLake = af?.dags?.find((d: any) => d.dag_id === 'odortwin_lakehouse')
   const RT = [
     ['MQTT 수신', `${b.mqtt_in_per_s ?? '-'} 건/s`, `게이트웨이 ${kpi?.gateways ?? '-'}개`, false],
     ['Kafka 적재', `${b.kafka_out_per_s ?? '-'} 건/s`, '토픽 15개', kpi?.kafka_ok === false],
@@ -257,14 +261,19 @@ function DataFlow() {
           {i > 0 && <span className="arr">→</span>}
           <div className={`node ${bad ? 'bad' : ''}`} style={{ flex: 1, minWidth: 0 }}><div className="n">{n}</div><div className="v">{v}</div><div className="s">{sub}</div></div></span>)}</div>
         <div>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>배치 · Trino → Iceberg (120초 주기)</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>{af ? '배치 · Airflow DAG → Trino → Iceberg (5분 주기)' : '배치 · 예비 실행기 → Trino → Iceberg (120초 주기)'}</div>
           <div className="flow">
             <div className="node" style={{ flex: 1 }}><div className="n">TimescaleDB (운영)</div><div className="v">실시간 적재</div></div><span className="arr">→</span>
             <div className="node" style={{ flex: 1, borderColor: '#92400e' }}><div className="n" style={{ color: '#f59e0b' }}>bronze</div><div className="v">{man(layer.bronze?.rows)} 행</div></div><span className="arr">→</span>
             <div className="node" style={{ flex: 1, borderColor: '#475569' }}><div className="n" style={{ color: '#cbd5e1' }}>silver</div><div className="v">{man(layer.silver?.rows)} 행</div></div><span className="arr">→</span>
             <div className="node" style={{ flex: 1, borderColor: '#a16207' }}><div className="n" style={{ color: '#fbbf24' }}>gold</div><div className="v">통계표 {layer.gold?.n ?? '-'}개</div></div>
           </div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 5 }}>최근 배치 {run ? `${run.job} · ${Number(run.rows ?? 0).toLocaleString()}행 · ${dayjs(run.finished_at).format('HH:mm:ss')} ${run.status === 'ok' ? '성공' : '오류'}` : '-'} · 스냅샷 {lake.snapshots?.length ?? 0}개 (Iceberg 시간 여행)</div>
+          {af && afLake ? <div style={{ fontSize: 12, marginTop: 5, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span><span className="dot" style={{ background: AF_COL[afLake.state] ?? '#64748b' }} />Airflow <span className="mono">odortwin_lakehouse</span></span>
+            <span className="muted">최근 {AF_KO[afLake.state] ?? afLake.state ?? '-'} {afLake.start_date ? dayjs(afLake.start_date).format('HH:mm') : ''} · 작업 {af.tasks?.success ?? 0}/{Object.values(af.tasks || {}).reduce((a: number, b: any) => a + b, 0)} 성공</span>
+            <span className="muted">24시간 {af.day?.ok ?? 0}/{af.day?.n ?? 0}회 성공{afLake.next_at ? ` · 다음 ${dayjs(afLake.next_at).format('HH:mm')}` : ''} · DAG {af.dags?.filter((d: any) => !d.is_paused).length ?? 0}개 운영 + 설계 {af.dags?.filter((d: any) => d.is_paused).length ?? 0}개</span>
+          </div> : null}
+          <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>최근 배치 {run ? `${run.job} · ${Number(run.rows ?? 0).toLocaleString()}행 · ${dayjs(run.finished_at).format('HH:mm:ss')} ${run.status === 'ok' ? '성공' : run.status === 'partial' ? '일부 실패' : '오류'}` : '-'} · 스냅샷 {lake.snapshots?.length ?? 0}개 (Iceberg 시간 여행)</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <div style={{ fontSize: 13 }}>2년 기록 · 월별 NH₃ (ppm) <span className="muted" style={{ fontSize: 12 }}>2023-02 ~ 2025-04 · gold.monthly_trend</span></div>

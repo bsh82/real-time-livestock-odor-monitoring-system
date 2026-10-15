@@ -193,7 +193,7 @@ async def main():
         await ops.caption('관제 화면은 계속 실시간으로 갱신'); await ins.caption('⑦ 민원 역추적 — 민원 지점의 예측 농도를 농가별로 분해해 원인 추정')
         await ins.click_text('민원 발생'); await asyncio.sleep(22)
         # ⑧ 데이터 흐름
-        await ins.caption('⑧ 데이터 흐름 — MQTT → Kafka → Flink → GPU 확산 → 화면 · 배치: Trino → Iceberg(bronze → silver → gold)'); await asyncio.sleep(16)
+        await ins.caption('⑧ 데이터 흐름 — MQTT → Kafka → Flink → GPU 확산 → 화면 · 배치: Airflow → Trino → Iceberg(bronze → silver → gold)'); await asyncio.sleep(16)
         # ⑨ 가상 실험
         await ins.caption('⑨ 가상 실험 — 바람이 바뀌면? GPU 대리모델 수 초 vs CFD 풍향 1개 35~45분')
         await ins.click_text('남서'); await ins.click_text('3 m/s'); await asyncio.sleep(2); await ins.click_text('GPU로 계산')

@@ -21,7 +21,7 @@
  weather(JMA MSM 바람) ──> Kafka ──> engine (GPU: U-FNO+F 바람장 → FNO 농도장, 권역 20개)
                                                      │
                              api (FastAPI · WebSocket) ──> web (React · deck.gl · three.js)
- batch: Trino ──> Iceberg (SeaweedFS S3)  bronze → silver → gold (2분 주기)
+ Airflow DAG ──> Trino ──> Iceberg (SeaweedFS S3)  bronze → silver → gold (5분 주기, 이력 통계·유지 관리는 매일)
 ```
 
 | 폴더 | 내용 |
@@ -31,7 +31,8 @@
 | `infra/flink/jobs` | Flink SQL 스트림 작업 (정제·집계·배출량·경보) |
 | `services/engine` | 확산 대리모델 (`model.py`), 권역 합성·지도 생성 (`main.py`), 농장 3D 장면 (`farm3d.py`) |
 | `services/api` | REST·WebSocket, 경보 생애주기, 민원 역추적, 시나리오 제어 |
-| `services/batch` | Trino ELT → Iceberg 레이크하우스 |
+| `orchestration/airflow_dags` | Airflow 3 DAG — 레이크하우스 5분 주기·이력 통계·Iceberg 유지 관리 + 확장 설계(농가 온보딩, 재학습) |
+| `services/batch` | 레이크하우스 단계 정의 `steps.py` (Trino SQL → Iceberg) · Airflow 가 없을 때의 예비 실행기 |
 | `services/weather` | Open-Meteo(JMA MSM) 과거 바람 자료 |
 | `web` | 관제 화면 (React + Vite) |
 | `scripts` | 원클릭 기동·정지 (Windows PowerShell) |
