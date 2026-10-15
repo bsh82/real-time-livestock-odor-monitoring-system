@@ -21,6 +21,10 @@ def cycle():
 def main(once):
     S.ensure_layers()
     while True:
+        if S.airflow_alive():                       # Airflow 가 돌고 있으면 그쪽에 맡긴다 (둘이 같이 돌지 않게)
+            print('Airflow 스케줄러가 살아 있어 이번 주기는 건너뜀', flush=True)
+            if once: break
+            time.sleep(INTERVAL); continue
         try: cycle()
         except Exception as e:
             traceback.print_exc(); S.log('batch', 0, 'error', str(e))

@@ -399,7 +399,10 @@ def airflow_status():
                                 (lake['run_id'],)).fetchall() if lake and lake['run_id'] else []
             day = con.execute("""SELECT count(*) FILTER (WHERE state='success') AS ok, count(*) AS n FROM dag_run
                 WHERE dag_id='odortwin_lakehouse' AND start_date > now() - interval '24 hours'""").fetchone()
-        return dict(dags=[jsonable({k: v for k, v in d.items() if k != 'run_id'}) for d in dags], tasks={t['state'] or 'none': t['n'] for t in tasks}, day=day)
+            alive = con.execute("SELECT coalesce(max(latest_heartbeat) > now() - interval '60 seconds', false) AS a FROM job WHERE job_type = 'SchedulerJob'").fetchone()['a']
+            design = {r['dag_id'] for r in con.execute("SELECT dag_id FROM dag_tag WHERE name = '설계'").fetchall()}
+        return dict(dags=[jsonable({**{k: v for k, v in d.items() if k != 'run_id'}, 'design': d['dag_id'] in design}) for d in dags],
+                    tasks={t['state'] or 'none': t['n'] for t in tasks}, day=day, alive=bool(alive))
     except Exception:
         return None
 

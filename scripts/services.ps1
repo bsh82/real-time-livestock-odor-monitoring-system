@@ -8,7 +8,7 @@ $demo = Split-Path -Parent $PSScriptRoot
 $py = Join-Path $demo ".conda\python.exe"
 $all = @("bridge", "simulator", "weather", "engine", "api")
 $extra = @("batch")                                   # 예비 (Airflow 대체)
-if ($names.Count -eq 0) { $names = $all }
+if ($names.Count -eq 0) { $names = if ($cmd -eq "stop") { $all + $extra } else { $all } }   # 정지는 예비 배치까지
 
 function Find-Svc($n) {
     Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.CommandLine -like "*services.$n.main*" }

@@ -65,7 +65,7 @@
 
 `.conda\python.exe tools\demo_record.py <출력 폴더> --only=ops` (그다음 `--only=insight`)
 — 시연 대본(정상 → 배출 급증 → 경보 → 3D → 저감 조치 → 해제 → 민원 → 데이터 흐름 → 가상 실험)을 자동으로 진행하며 화면을 1920×1080 15 fps 로 녹화한다 (NVENC).
-한 번에 한 화면만 그려야 CPU 가 80 % 안에 든다. 녹화하는 동안 `scripts\services.ps1 stop batch` 로 배치를 잠시 멈추면 순간 부하가 줄어든다.
+한 번에 한 화면만 그려야 CPU 가 80 % 안에 든다. 녹화하는 동안 `docker compose exec -T airflow airflow dags pause odortwin_lakehouse` 로 배치를 잠시 멈추면 순간 부하가 줄어든다 (끝나면 `unpause`).
 
 ## 공개하지 않는 것
 

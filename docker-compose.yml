@@ -1,7 +1,12 @@
 # OdorTwin 인프라 (로컬 PC 1대). 파이썬 서비스(시뮬레이터·브리지·기상·확산엔진·API)는 호스트에서 실행.
 # 기동: docker compose up -d   |  상태: docker compose ps
-# 자원 상한: 합계 CPU 약 9.5 / 12, 메모리 약 11 GB (로컬 CPU 80 % 이하 유지 목적)
+# 자원 상한: 합계 CPU 약 9.75 / 12, 메모리 약 13 GB (컨테이너 상한 합. 평소 사용은 훨씬 낮음 — 실제 CPU 는 80 % 이하로 운영)
+# 로그: 서비스마다 json-file 10 MB × 3 개까지 (전시 하루 종일 돌려도 디스크가 차지 않게)
 name: odortwin
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
 
 services:
   mosquitto:
@@ -11,6 +16,7 @@ services:
     cpus: 0.25
     mem_limit: 128m
     restart: unless-stopped
+    logging: *logging
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
@@ -37,6 +43,7 @@ services:
     cpus: 1.5
     mem_limit: 1536m
     restart: unless-stopped
+    logging: *logging
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -48,6 +55,7 @@ services:
     cpus: 0.5
     mem_limit: 512m
     restart: unless-stopped
+    logging: *logging
 
   timescaledb:
     image: timescale/timescaledb:latest-pg17
@@ -62,6 +70,7 @@ services:
     cpus: 1.5
     mem_limit: 2g
     restart: unless-stopped
+    logging: *logging
 
   seaweedfs:
     image: chrislusf/seaweedfs:3.97
@@ -73,6 +82,7 @@ services:
     cpus: 0.5
     mem_limit: 512m
     restart: unless-stopped
+    logging: *logging
 
   trino:
     image: trinodb/trino:476
@@ -83,6 +93,7 @@ services:
     cpus: 2
     mem_limit: 3g
     restart: unless-stopped
+    logging: *logging
 
   flink-jobmanager:
     build: ./infra/flink
@@ -104,6 +115,7 @@ services:
     cpus: 1
     mem_limit: 1280m
     restart: unless-stopped
+    logging: *logging
 
   flink-taskmanager:
     image: odortwin/flink:1.20
@@ -121,6 +133,7 @@ services:
     cpus: 2
     mem_limit: 2304m
     restart: unless-stopped
+    logging: *logging
 
   # 배치 오케스트레이션: Airflow 3 (단일 컨테이너 standalone, LocalExecutor, 메타데이터는 TimescaleDB 의 airflow DB)
   # DAG = orchestration/airflow_dags, 작업 코드 = services/batch/steps.py (읽기 전용으로 붙임). 화면 127.0.0.1:8090
@@ -143,8 +156,8 @@ services:
       AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: "120"
       AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "True"
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"          # 로그인 없이 (포트가 이 PC 에만 열려 있음)
-      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-odortwin-local-dev-jwt}
-      AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-odortwin-local-dev-key}
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-odortwin-local-development-only-jwt-secret-change-me-0123456789abcdef}
+      AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-odortwin-local-development-only-api-secret-change-me-0123456789abcdef}
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://localhost:8080/execution/   # 작업 실행기 → 같은 컨테이너의 API 서버
       PYTHONPATH: /opt/odortwin
       ODORTWIN_RUNTIME: /tmp/odortwin
@@ -156,9 +169,16 @@ services:
       - ./services:/opt/odortwin/services:ro
       - airflow-logs:/opt/airflow/logs
     depends_on: [timescaledb, trino]
-    cpus: 1.5
+    healthcheck:                                         # standalone 은 구성 요소 하나가 죽어도 컨테이너가 살아 있으므로 상태로 표시
+      test: ["CMD", "python", "-c", "import json,urllib.request as u,sys; h=json.load(u.urlopen('http://localhost:8080/api/v2/monitor/health',timeout=5)); sys.exit(0 if h['scheduler']['status']=='healthy' and h['dag_processor']['status']=='healthy' else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    cpus: 1
     mem_limit: 2g
     restart: unless-stopped
+    logging: *logging
 
 volumes:
   airflow-logs:

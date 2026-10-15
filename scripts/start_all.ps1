@@ -42,7 +42,7 @@ $null = WaitFor "Flink" 90 { try { (Invoke-RestMethod http://127.0.0.1:8081/over
 # Airflow 메타데이터 DB (예전 볼륨에는 없을 수 있음) → 만든 뒤 Airflow 를 다시 띄운다
 $hasAf = docker compose exec -T timescaledb psql -U odor -d odor -tAc "SELECT 1 FROM pg_database WHERE datname='airflow'"
 if (-not "$hasAf".Trim()) { docker compose exec -T timescaledb psql -U odor -d odor -c "CREATE DATABASE airflow" | Out-Null; docker compose restart airflow *> $null; Write-Host "  airflow DB created" }
-$null = WaitFor "Airflow" 180 { try { (Invoke-RestMethod http://127.0.0.1:8090/api/v2/monitor/health -TimeoutSec 3).scheduler.status -eq "healthy" } catch { $false } }
+$afOk = WaitFor "Airflow" 180 { try { (Invoke-RestMethod http://127.0.0.1:8090/api/v2/monitor/health -TimeoutSec 3).scheduler.status -eq "healthy" } catch { $false } }
 
 # 3. 토픽·버킷 (있으면 그대로)
 Step "Kafka topics / S3 bucket"
@@ -80,6 +80,12 @@ if (-not $running) {
 # 6. 호스트 서비스
 Step "Host services"
 & "$PSScriptRoot\services.ps1" start
+if ($afOk) {                                  # 레이크하우스를 바로 한 번 (초기화 직후 화면의 표 현황이 지난 데이터로 남지 않게)
+    docker compose exec -T airflow airflow dags trigger odortwin_lakehouse *> $null; Write-Host "  Airflow odortwin_lakehouse triggered"
+} else {
+    Write-Host "  Airflow 가 준비되지 않아 예비 배치 실행기를 켭니다 (Airflow 가 돌아오면 예비 실행기는 스스로 쉰다)" -ForegroundColor Yellow
+    & "$PSScriptRoot\services.ps1" start batch
+}
 $null = WaitFor "API" 90 { try { (Invoke-WebRequest http://127.0.0.1:8000/api/meta -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200 } catch { $false } }
 & "$PSScriptRoot\services.ps1" status
 

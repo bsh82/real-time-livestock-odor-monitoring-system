@@ -261,17 +261,18 @@ function DataFlow() {
           {i > 0 && <span className="arr">→</span>}
           <div className={`node ${bad ? 'bad' : ''}`} style={{ flex: 1, minWidth: 0 }}><div className="n">{n}</div><div className="v">{v}</div><div className="s">{sub}</div></div></span>)}</div>
         <div>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>{af ? '배치 · Airflow DAG → Trino → Iceberg (5분 주기)' : '배치 · 예비 실행기 → Trino → Iceberg (120초 주기)'}</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>{af?.alive ? '배치 · Airflow DAG → Trino → Iceberg (5분 주기)' : '배치 · 예비 실행기 → Trino → Iceberg (120초 주기)'}</div>
           <div className="flow">
             <div className="node" style={{ flex: 1 }}><div className="n">TimescaleDB (운영)</div><div className="v">실시간 적재</div></div><span className="arr">→</span>
             <div className="node" style={{ flex: 1, borderColor: '#92400e' }}><div className="n" style={{ color: '#f59e0b' }}>bronze</div><div className="v">{man(layer.bronze?.rows)} 행</div></div><span className="arr">→</span>
             <div className="node" style={{ flex: 1, borderColor: '#475569' }}><div className="n" style={{ color: '#cbd5e1' }}>silver</div><div className="v">{man(layer.silver?.rows)} 행</div></div><span className="arr">→</span>
             <div className="node" style={{ flex: 1, borderColor: '#a16207' }}><div className="n" style={{ color: '#fbbf24' }}>gold</div><div className="v">통계표 {layer.gold?.n ?? '-'}개</div></div>
           </div>
-          {af && afLake ? <div style={{ fontSize: 12, marginTop: 5, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {af && !af.alive && <div style={{ fontSize: 12, marginTop: 5, color: '#fca5a5' }}><span className="dot" style={{ background: '#ef4444' }} />Airflow 스케줄러 중단 — 예비 실행기 사용 중이거나 재시작 필요 (docker compose restart airflow)</div>}
+          {af?.alive && afLake ? <div style={{ fontSize: 12, marginTop: 5, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><span className="dot" style={{ background: AF_COL[afLake.state] ?? '#64748b' }} />Airflow <span className="mono">odortwin_lakehouse</span></span>
             <span className="muted">최근 {AF_KO[afLake.state] ?? afLake.state ?? '-'} {afLake.start_date ? dayjs(afLake.start_date).format('HH:mm') : ''} · 작업 {af.tasks?.success ?? 0}/{Object.values(af.tasks || {}).reduce((a: number, b: any) => a + b, 0)} 성공</span>
-            <span className="muted">24시간 {af.day?.ok ?? 0}/{af.day?.n ?? 0}회 성공{afLake.next_at ? ` · 다음 ${dayjs(afLake.next_at).format('HH:mm')}` : ''} · DAG {af.dags?.filter((d: any) => !d.is_paused).length ?? 0}개 운영 + 설계 {af.dags?.filter((d: any) => d.is_paused).length ?? 0}개</span>
+            <span className="muted">24시간 {af.day?.ok ?? 0}/{af.day?.n ?? 0}회 성공{afLake.next_at ? ` · 다음 ${dayjs(afLake.next_at).format('HH:mm')}` : ''} · DAG {af.dags?.filter((d: any) => !d.design).length ?? 0}개 운영 + 설계 {af.dags?.filter((d: any) => d.design).length ?? 0}개</span>
           </div> : null}
           <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>최근 배치 {run ? `${run.job} · ${Number(run.rows ?? 0).toLocaleString()}행 · ${dayjs(run.finished_at).format('HH:mm:ss')} ${run.status === 'ok' ? '성공' : run.status === 'partial' ? '일부 실패' : '오류'}` : '-'} · 스냅샷 {lake.snapshots?.length ?? 0}개 (Iceberg 시간 여행)</div>
         </div>

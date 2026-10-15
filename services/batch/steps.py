@@ -6,8 +6,11 @@ Airflow DAG(orchestration/airflow_dags)와 예비 배치 서비스(services/batc
   gold   : 통계 — 화면이 Trino 로 읽는 표 (STREAM: 실시간 재생 구간, HISTORY: 2년 이력)
 """
 import time
+from contextlib import contextmanager
 import psycopg, trino
 from services.common import config as C
+
+AIRFLOW_DSN = C.PG_DSN.rsplit('/', 1)[0] + '/airflow'
 
 
 def trino_con():
@@ -31,9 +34,40 @@ def log(job, rows, status, detail='', started=None):
                    (job, started or time.time(), rows, status, str(detail)[:500]))
 
 
+@contextmanager
+def lake_lock(name, wait=True, timeout=600):
+    """같은 일을 두 실행기(Airflow DAG 끼리, 또는 Airflow 와 예비 실행기)가 동시에 하지 않게 하는 PostgreSQL 권고 잠금.
+    wait=False 면 이미 누가 하고 있을 때 바로 False 를 준다."""
+    con = psycopg.connect(C.PG_DSN, autocommit=True)
+    try:
+        got, t0 = False, time.time()
+        while True:
+            got = con.execute('SELECT pg_try_advisory_lock(hashtext(%s))', (f'odortwin.{name}',)).fetchone()[0]
+            if got or not wait or time.time() - t0 > timeout: break
+            time.sleep(2)
+        yield got
+    finally:
+        try: con.execute('SELECT pg_advisory_unlock_all()')
+        finally: con.close()
+
+
+def airflow_alive():
+    """Airflow 스케줄러가 최근 60초 안에 살아 있었나 (메타데이터 DB 의 heartbeat)"""
+    try:
+        with psycopg.connect(AIRFLOW_DSN, connect_timeout=2) as con:
+            return bool(con.execute("SELECT coalesce(max(latest_heartbeat) > now() - interval '60 seconds', false) FROM job WHERE job_type = 'SchedulerJob'").fetchone()[0])
+    except Exception:
+        return False
+
+
 # ---------------- 초기화 ----------------
 def ensure_layers():
-    """스키마·초기 이력 표가 없으면 만든다 (있으면 바로 끝남)"""
+    """스키마·초기 이력 표가 없으면 만든다 (있으면 바로 끝남). 두 DAG 가 동시에 처음 돌 때 겹치지 않게 잠금 안에서."""
+    with lake_lock('ddl'):
+        return _ensure_layers()
+
+
+def _ensure_layers():
     cur = trino_con().cursor(); made = []
     for s in ('bronze', 'silver', 'gold'): run(cur, f'CREATE SCHEMA IF NOT EXISTS lake.{s}')
     if not exists(cur, 'bronze', 'sensor_history'):
@@ -58,7 +92,14 @@ def ensure_layers():
 
 # ---------------- bronze 증분 ----------------
 def bronze_incremental():
-    """운영 DB(TimescaleDB sensor_raw) 의 새 측정 → bronze.sensor_stream (ingest_at 워터마크 이후만)"""
+    """운영 DB(TimescaleDB sensor_raw) 의 새 측정 → bronze.sensor_stream (ingest_at 워터마크 이후만).
+    워터마크 읽기~적재를 잠금 안에서 → 두 실행기가 같은 구간을 두 번 넣지 않는다 (이미 누가 하고 있으면 건너뜀)."""
+    with lake_lock('bronze', wait=False) as got:
+        if not got: return 0
+        return _bronze_incremental()
+
+
+def _bronze_incremental():
     cur = trino_con().cursor(); t0 = time.time()
     cur.execute('SELECT max(ingest_at) FROM lake.bronze.sensor_stream'); wm = cur.fetchall()[0][0]
     cond = f"WHERE ingest_at > TIMESTAMP '{wm.isoformat(sep=' ')}'" if wm else ''
@@ -109,17 +150,19 @@ GOLD_HISTORY = {
 ALL = {**SILVER, **{k: v[0] for k, v in GOLD_STREAM.items()}, **GOLD_HISTORY}
 
 
-def refresh(name):
-    """표 하나를 다시 만든다. 실패하면 batch_runs 에 오류를 남기고 예외를 다시 던진다 (Airflow 가 재시도)"""
+def refresh(name, log_error=True):
+    """표 하나를 다시 만든다. 실패하면 예외를 다시 던진다 (Airflow 가 재시도). batch_runs 오류 기록은 마지막 시도에서만(log_error)"""
     cur = trino_con().cursor(); t0 = time.time()
     try: return int(run(cur, ALL[name]) or 0)
     except Exception as e:
-        log(name, 0, 'error', str(e), t0); raise
+        if log_error: log(name, 0, 'error', str(e), t0)
+        raise
 
 
 LAKE_TABLES = [('bronze', 'sensor_history'), ('bronze', 'sensor_stream'), ('silver', 'sensor_hourly_history'), ('silver', 'sensor_stream_clean'),
                ('silver', 'emission'), ('silver', 'dispersion'), ('silver', 'alarms'), ('gold', 'monthly_trend'), ('gold', 'farm_rank'),
-               ('gold', 'hourly_profile'), ('gold', 'cluster_exposure'), ('gold', 'alarm_summary'), ('gold', 'daily_stream')]
+               ('gold', 'hourly_profile'), ('gold', 'cluster_exposure'), ('gold', 'alarm_summary'), ('gold', 'daily_stream'),
+               ('silver', 'complaints'), ('gold', 'complaint_summary')]
 
 
 def lake_tables():
@@ -131,10 +174,13 @@ def lake_tables():
 
 
 # ---------------- Iceberg 유지 관리 ----------------
-def maintain(table, optimize=False):
-    """작은 파일 합치기(optimize) · 오래된 스냅샷 지우기(7일) · 고아 파일 정리. 시간 여행은 최근 7일까지 남는다"""
+def maintain(table, optimize=False, retention='1d'):
+    """작은 파일 합치기(optimize) · 오래된 스냅샷 지우기 · 고아 파일 정리. 없는 표는 건너뜀.
+    5분마다 새로 만드는 표는 스냅샷이 하루 288개씩 쌓이므로 1일만 남기고, 증분 표(bronze)는 7일(시간 여행)."""
     cur = trino_con().cursor(); done = []
+    schema, name = table.split('.')
+    if not exists(cur, schema, name): return ['skip (없음)']
     if optimize: run(cur, f"ALTER TABLE lake.{table} EXECUTE optimize(file_size_threshold => '64MB')"); done.append('optimize')
-    run(cur, f"ALTER TABLE lake.{table} EXECUTE expire_snapshots(retention_threshold => '7d')"); done.append('expire_snapshots')
-    run(cur, f"ALTER TABLE lake.{table} EXECUTE remove_orphan_files(retention_threshold => '7d')"); done.append('remove_orphan_files')
+    run(cur, f"ALTER TABLE lake.{table} EXECUTE expire_snapshots(retention_threshold => '{retention}')"); done.append('expire_snapshots')
+    run(cur, f"ALTER TABLE lake.{table} EXECUTE remove_orphan_files(retention_threshold => '{retention}')"); done.append('remove_orphan_files')
     return done
