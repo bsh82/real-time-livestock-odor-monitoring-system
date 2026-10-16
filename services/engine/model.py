@@ -1,4 +1,4 @@
-"""확산 대리모델 래퍼: 지형·건물·거칠기 + 풍향 → U-FNO+F 바람장(시드 3개 평균) → 가우시안 사전학습 FNO 농도장(시드 3개 평균).
+"""확산 대리모델 래퍼: 지형·건물·거칠기 + 풍향 → U-FNO+F 바람장(시드 3개 평균) → 가우시안 사전학습·CFD 미세조정·물리 잔차 보정 FNO 농도장(시드 3개 평균).
 입력 구성은 연구 코드(services/engine/ml)를 그대로 쓰고, CFD 없는 농가는 래스터에서 만든다 (CFD 입력과 비교한 바람 예측 차 약 1.4 %).
 출력: 단위배출(1 g/s)·기준 풍속 5 m/s 일 때의 2 m 농도 [s/m³] 와 10 m 바람 (u, v) [m/s].
 풍향 흔들림 후처리(smooth_fields): 정상 상태 RANS 정답은 수 분 규모 풍향 변동을 담지 못해 측면 폭이 좁다 →
@@ -19,8 +19,9 @@ class Surrogate:
         self.dev = device if torch.cuda.is_available() else 'cpu'
         self.lock = threading.Lock()
         self.wnets = [self._load(WD.WindNet('ufno', use_F=True), f'{MODELS}/windF/ufno_all_s{s}/last.pt') for s in range(3)]
-        # 농도 모델: 2026-10-14 난류 확산계수(D = 2.3e-5 + ν_t/0.7) CFD 정답으로 재학습한 판 (옛 pt_fno_n0 은 새 정답과 맞지 않아 쓰지 않음)
-        self.cnets = [self._load(M.build('pt_fno', n_in=23, n_out=6), f'{MODELS}/nut/pt_fno_n0_s{s}/best.pt') for s in range(3)]
+        # 농도 모델: 2026-10-16 이류-확산 물리 잔차(가변 D = 2.3e-5 + ν_t/0.7) 미세조정판. 입출력은 nut/ (10-14, 데이터 손실만) 과 같고
+        # 정확도도 같으며 배출원 근처 피크 과대예측(1.18배 → 1.04배)이 줄고 잔차가 CFD 해 수준이 된다. 옛 pt_fno_n0 은 새 정답과 맞지 않아 쓰지 않음.
+        self.cnets = [self._load(M.build('pt_fno', n_in=23, n_out=6), f'{MODELS}/nut_pino/pt_fno_n0_s{s}/best.pt') for s in range(3)]
         self.static, self.cache, self.cache_size = {}, OrderedDict(), cache_size
         self.mcache = OrderedDict()          # 풍향 흔들림 평균 결과 (code, θ, σ) → 2 m 농도
 
