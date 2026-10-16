@@ -10,7 +10,7 @@
 | 모니터 1 — 실시간 관제 (`/ops`) | 모니터 2 — 통계 · 민원 · 시스템 (`/insight`) |
 |---|---|
 | 권역(클러스터) 목록 · 확산 지도 · 센서 상태 · 경보 처리(발생 → 확인 → 저감 조치 → 해제) · 선택 농가 추이 · 농장별 3D 확산(지형·건물·바람 유선) | 시연 진행 · 민원 역추적(기여 농가 분해) · 가상 실험(GPU vs CFD) · 데이터 흐름 · 레이크하우스(bronze/silver/gold) |
-<img width="461" height="412" alt="image" src="https://github.com/user-attachments/assets/0262d3db-1e8d-480c-8501-d5f129d4cbd9" />
+<img width="4520" height="612" alt="image" src="https://github.com/user-attachments/assets/0262d3db-1e8d-480c-8501-d5f129d4cbd9" />
 
 ## 구성
 
